@@ -1,34 +1,37 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ApiError,
   closeAccount,
   freezeAccount,
   fundAccount,
-  listAccounts,
   openAccount,
   unfreezeAccount,
   withdrawAccount,
-  type BankAccount,
 } from "../api";
-import { centsToDollars, dollarsToCents } from "../money";
+import { dollarsToCents } from "../money";
+import { formatUSD } from "../format";
+import { useAccounts } from "../hooks";
+import { AccountHero, AmountField, Banner, EmptyState, IconArrow, IconFreeze, IconMinus, IconPlus, Page, Sheet } from "../ui";
 
-type MoneyForm = { id: string; kind: "fund" | "withdraw" };
+type MoneyKind = "fund" | "withdraw";
 
 export function AccountsPage() {
-  const [accounts, setAccounts] = useState<BankAccount[] | null>(null);
-  const [error, setError] = useState("");
+  const { accounts, error, setError, reload } = useAccounts();
   const [pending, setPending] = useState(false);
-  const [form, setForm] = useState<MoneyForm | null>(null);
+  const [form, setForm] = useState<MoneyKind | null>(null);
   const [amount, setAmount] = useState("100.00");
-
-  async function reload() {
-    const data = await listAccounts();
-    setAccounts(data.accounts);
-  }
+  const [closing, setClosing] = useState(false);
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
-    reload().catch((err) => setError(err instanceof Error ? err.message : "Failed to load accounts"));
-  }, []);
+    const action = searchParams.get("action");
+    if (action === "fund" || action === "withdraw") {
+      setForm(action);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   async function onOpen() {
     setError("");
@@ -45,24 +48,25 @@ export function AccountsPage() {
 
   async function onMoney(e: FormEvent) {
     e.preventDefault();
-    if (!form) return;
+    const acct = accounts?.[0];
+    if (!acct || !form) return;
     const cents = dollarsToCents(amount);
     if (cents == null || cents <= 0) {
-      setError("Enter a dollar amount with at most two decimals");
+      setError("Enter an amount with at most two decimals");
       return;
     }
     setError("");
     setPending(true);
     try {
-      if (form.kind === "fund") {
-        await fundAccount(form.id, cents, crypto.randomUUID());
+      if (form === "fund") {
+        await fundAccount(acct.id, cents, crypto.randomUUID());
       } else {
-        await withdrawAccount(form.id, cents, crypto.randomUUID());
+        await withdrawAccount(acct.id, cents, crypto.randomUUID());
       }
       setForm(null);
       await reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Posting failed");
+      setError(err instanceof ApiError ? err.message : "Could not post the amount");
     } finally {
       setPending(false);
     }
@@ -74,6 +78,7 @@ export function AccountsPage() {
     try {
       await action();
       setForm(null);
+      setClosing(false);
       await reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not update account");
@@ -83,103 +88,118 @@ export function AccountsPage() {
   }
 
   if (!accounts) {
-    return <p className="lede">Loading accounts…</p>;
+    return <p className="kicker">Loading…</p>;
   }
 
+  const acct = accounts[0];
+
   return (
-    <div>
-      <h1>Accounts</h1>
-      <p className="lede">
-        Demand-deposit balances come from the ledger. Add funds credits vault cash; withdraw is the reverse.
-        Freeze stops money movement. Close requires a zero balance.
-      </p>
-      {error ? <p className="error">{error}</p> : null}
-      {accounts.length === 0 ? (
-        <div className="tile">
-          <p>No deposit account yet. Opening one creates a liability ledger account with a zero balance.</p>
-          <button type="button" disabled={pending} onClick={onOpen}>
-            {pending ? "Opening…" : "Open account"}
-          </button>
-        </div>
+    <Page title="Account" kicker="USD">
+      {error ? <Banner>{error}</Banner> : null}
+      {!acct ? (
+        <EmptyState
+          title="No account yet"
+          body="Open a USD demand-deposit account to hold a balance."
+          action={
+            <button className="btn btn-primary" type="button" disabled={pending} onClick={onOpen}>
+              {pending ? "Opening…" : "Open account"}
+            </button>
+          }
+        />
       ) : (
         <>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Number</th>
-                <th>Status</th>
-                <th>Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.map((a) => (
-                <tr key={a.id}>
-                  <td className="money">{a.account_number}</td>
-                  <td>{a.status}</td>
-                  <td className="money">${centsToDollars(a.balance_cents)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {accounts.map((a) =>
-            a.status === "closed" ? null : (
-              <div key={a.id + "-actions"} className="row-actions" style={{ marginTop: 16 }}>
-                {a.status === "active" ? (
-                  <>
-                    <button type="button" className="ghost" onClick={() => setForm({ id: a.id, kind: "fund" })}>
-                      Add funds
-                    </button>
-                    <button type="button" className="ghost" onClick={() => setForm({ id: a.id, kind: "withdraw" })}>
-                      Withdraw
-                    </button>
-                    <button
-                      type="button"
-                      className="ghost"
-                      disabled={pending}
-                      onClick={() => runStatus(() => freezeAccount(a.id))}
-                    >
-                      Freeze
-                    </button>
-                  </>
-                ) : null}
-                {a.status === "frozen" ? (
-                  <button
-                    type="button"
-                    className="ghost"
-                    disabled={pending}
-                    onClick={() => runStatus(() => unfreezeAccount(a.id))}
-                  >
-                    Unfreeze
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="ghost"
-                  disabled={pending}
-                  onClick={() => {
-                    if (!window.confirm("Close this account? This cannot be undone.")) return;
-                    void runStatus(() => closeAccount(a.id));
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-            ),
-          )}
-          {form ? (
-            <form className="card" style={{ marginTop: 24 }} onSubmit={onMoney}>
-              <h2>{form.kind === "fund" ? "Add funds" : "Withdraw"}</h2>
-              <label>
-                Amount (USD)
-                <input value={amount} onChange={(e) => setAmount(e.target.value)} required />
-              </label>
-              <button type="submit" disabled={pending}>
-                {pending ? "Posting…" : form.kind === "fund" ? "Credit account" : "Debit account"}
+          <AccountHero account={acct} />
+          {acct.status === "active" ? (
+            <div className="quicks">
+              <button className="quick" type="button" onClick={() => setForm("fund")}>
+                <span className="quick-icon">
+                  <IconPlus />
+                </span>
+                Add
               </button>
-            </form>
+              <button className="quick" type="button" onClick={() => setForm("withdraw")}>
+                <span className="quick-icon">
+                  <IconMinus />
+                </span>
+                Withdraw
+              </button>
+              <button className="quick" type="button" onClick={() => navigate("/transfers")}>
+                <span className="quick-icon">
+                  <IconArrow />
+                </span>
+                Send
+              </button>
+              <button
+                className="quick"
+                type="button"
+                disabled={pending}
+                onClick={() => runStatus(() => freezeAccount(acct.id))}
+              >
+                <span className="quick-icon">
+                  <IconFreeze />
+                </span>
+                Freeze
+              </button>
+            </div>
           ) : null}
+          {acct.status === "frozen" ? (
+            <div className="manage">
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={pending}
+                onClick={() => runStatus(() => unfreezeAccount(acct.id))}
+              >
+                Unfreeze
+              </button>
+              <button className="btn btn-danger" type="button" disabled={pending} onClick={() => setClosing(true)}>
+                Close account
+              </button>
+            </div>
+          ) : null}
+          {acct.status === "active" ? (
+            <div className="manage">
+              <button className="btn btn-quiet" type="button" disabled={pending} onClick={() => setClosing(true)}>
+                Close account
+              </button>
+            </div>
+          ) : null}
+          {acct.status === "closed" ? <p className="kicker">This account is closed and cannot move money.</p> : null}
         </>
       )}
-    </div>
+
+      {form && acct ? (
+        <Sheet title={form === "fund" ? "Add money" : "Withdraw"} onClose={() => setForm(null)}>
+          <form className="stack" onSubmit={onMoney}>
+            <AmountField value={amount} onChange={setAmount} />
+            <p className="avail">Available {formatUSD(acct.balance_cents)}</p>
+            <button className="btn btn-primary btn-block" type="submit" disabled={pending}>
+              {pending ? "Working…" : form === "fund" ? "Add money" : "Withdraw"}
+            </button>
+          </form>
+        </Sheet>
+      ) : null}
+
+      {closing && acct ? (
+        <Sheet title="Close this account?" onClose={() => setClosing(false)}>
+          <p className="lede" style={{ marginBottom: 16 }}>
+            You can only close it when the balance is zero. This cannot be undone.
+          </p>
+          <div className="manage">
+            <button className="btn btn-secondary" type="button" onClick={() => setClosing(false)}>
+              Keep it
+            </button>
+            <button
+              className="btn btn-danger"
+              type="button"
+              disabled={pending}
+              onClick={() => runStatus(() => closeAccount(acct.id))}
+            >
+              Close account
+            </button>
+          </div>
+        </Sheet>
+      ) : null}
+    </Page>
   );
 }

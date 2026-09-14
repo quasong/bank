@@ -1,6 +1,14 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { BANK_NAME } from "../brand";
+import { IconHome, IconList, IconSend, IconWallet } from "../ui";
+
+const links = [
+  { to: "/", label: "Home", icon: <IconHome />, end: true },
+  { to: "/accounts", label: "Account", icon: <IconWallet />, end: false },
+  { to: "/transfers", label: "Send", icon: <IconSend />, end: false },
+  { to: "/activity", label: "Activity", icon: <IconList />, end: false },
+];
 
 export function AppShell() {
   const { customer, logout } = useAuth();
@@ -11,36 +19,38 @@ export function AppShell() {
     navigate("/login", { replace: true });
   }
 
+  const navItems = () =>
+    links.map((l) => (
+      <NavLink key={l.to} to={l.to} end={l.end} className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}>
+        {l.icon}
+        {l.label}
+      </NavLink>
+    ));
+
   return (
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="mark" />
+          <span className="logo-mark">B</span>
           <div>
             <strong>{BANK_NAME}</strong>
-            <em>Internet banking</em>
+            <em>Personal</em>
           </div>
         </div>
-        <nav>
-          <NavLink to="/" end>
-            Overview
-          </NavLink>
-          <NavLink to="/accounts">Accounts</NavLink>
-          <NavLink to="/transfers">Transfers</NavLink>
-          <NavLink to="/activity">Activity</NavLink>
-        </nav>
-      </aside>
-      <div className="main">
-        <header className="topbar">
-          <span>{customer?.email}</span>
-          <button type="button" className="ghost" onClick={onLogout}>
+        <nav>{navItems()}</nav>
+        <div className="sidebar-foot">
+          <span className="who">{customer?.email}</span>
+          <button type="button" className="btn btn-quiet" onClick={onLogout}>
             Sign out
           </button>
-        </header>
+        </div>
+      </aside>
+      <div className="main">
         <section className="content">
           <Outlet />
         </section>
       </div>
+      <nav className="tabbar">{navItems()}</nav>
     </div>
   );
 }

@@ -1,82 +1,84 @@
-import { useEffect, useState } from "react";
-import { listAccounts, listActivity, type ActivityItem, type BankAccount } from "../api";
-import { centsToDollars } from "../money";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { listActivity, type ActivityItem } from "../api";
+import { activityHint, activityTitle, dayLabel, timeLabel } from "../format";
+import { useAccounts } from "../hooks";
+import { Banner, EmptyState, IconIn, IconOut, MoneyText, Page } from "../ui";
 
 export function ActivityPage() {
-  const [accounts, setAccounts] = useState<BankAccount[]>([]);
-  const [accountId, setAccountId] = useState("");
+  const { accounts, error, setError } = useAccounts();
   const [items, setItems] = useState<ActivityItem[]>([]);
-  const [error, setError] = useState("");
+  const account = accounts?.[0];
 
   useEffect(() => {
-    listAccounts()
-      .then((data) => {
-        setAccounts(data.accounts);
-        if (data.accounts[0]) setAccountId(data.accounts[0].id);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load accounts"));
-  }, []);
-
-  useEffect(() => {
-    if (!accountId) {
+    if (!account) {
       setItems([]);
       return;
     }
-    listActivity(accountId)
+    listActivity(account.id)
       .then((data) => setItems(data.items))
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load activity"));
-  }, [accountId]);
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load activity"));
+  }, [account, setError]);
 
-  if (accounts.length === 0) {
+  const groups = useMemo(() => {
+    const map = new Map<string, ActivityItem[]>();
+    for (const item of items) {
+      const key = dayLabel(item.created_at);
+      const list = map.get(key) ?? [];
+      list.push(item);
+      map.set(key, list);
+    }
+    return [...map.entries()];
+  }, [items]);
+
+  if (!accounts) {
+    return <p className="kicker">Loading…</p>;
+  }
+
+  if (!account) {
     return (
-      <div>
-        <h1>Activity</h1>
-        <p className="lede">Journal lines appear here after you open an account and post funding or a transfer.</p>
-      </div>
+      <Page title="Activity">
+        <EmptyState
+          title="No activity yet"
+          body="Open an account and add money to see payments here."
+          action={
+            <Link className="btn btn-primary" to="/accounts">
+              Go to account
+            </Link>
+          }
+        />
+      </Page>
     );
   }
 
   return (
-    <div>
-      <h1>Activity</h1>
-      <p className="lede">Entries are ledger lines for this deposit account, not a separate fake log.</p>
-      {error ? <p className="error">{error}</p> : null}
-      <label>
-        Account
-        <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.account_number}
-            </option>
-          ))}
-        </select>
-      </label>
+    <Page title="Activity">
+      {error ? <Banner>{error}</Banner> : null}
       {items.length === 0 ? (
-        <p className="lede">No journal lines yet.</p>
+        <EmptyState title="Nothing here yet" body="Add money or send a payment and it will show up in this list." />
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>When</th>
-              <th>Kind</th>
-              <th>Description</th>
-              <th>Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.journal_id + item.side}>
-                <td>{new Date(item.created_at).toLocaleString()}</td>
-                <td>{item.kind}</td>
-                <td>{item.description}</td>
-                <td className="money">
-                  {item.signed_cents > 0 ? "+" : ""}${centsToDollars(item.signed_cents)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <section className="panel">
+          {groups.map(([day, rows]) => (
+            <div className="day-group" key={day}>
+              <p className="day-label">{day}</p>
+              {rows.map((item) => (
+                <div className="txn" key={item.journal_id + item.side}>
+                  <span className={`txn-icon ${item.signed_cents >= 0 ? "in" : "out"}`}>
+                    {item.signed_cents >= 0 ? <IconIn /> : <IconOut />}
+                  </span>
+                  <div className="txn-copy">
+                    <strong>{activityTitle(item.kind, item.signed_cents)}</strong>
+                    <span>
+                      {activityHint(item.kind)} · {timeLabel(item.created_at)}
+                    </span>
+                  </div>
+                  <MoneyText cents={item.signed_cents} signed />
+                </div>
+              ))}
+            </div>
+          ))}
+        </section>
       )}
-    </div>
+    </Page>
   );
 }

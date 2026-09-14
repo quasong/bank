@@ -11,14 +11,14 @@ import { LoginPage, RegisterPage } from "./pages/AuthPages";
 function Guard({ children }: { children: ReactNode }) {
   const { ready, customer } = useAuth();
   const location = useLocation();
-  if (!ready) return <div className="boot">Restoring session…</div>;
+  if (!ready) return <div className="boot">Just a moment…</div>;
   if (!customer) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return children;
 }
 
 export function App() {
   const { ready } = useAuth();
-  if (!ready) return <div className="boot">Restoring session…</div>;
+  if (!ready) return <div className="boot">Just a moment…</div>;
 
   return (
     <Routes>

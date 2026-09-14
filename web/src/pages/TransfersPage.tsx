@@ -1,48 +1,43 @@
-import { FormEvent, useEffect, useState } from "react";
-import { ApiError, createTransfer, listAccounts, type BankAccount } from "../api";
+import { FormEvent, useState } from "react";
+import { Link } from "react-router-dom";
+import { ApiError, createTransfer } from "../api";
+import { formatAccountNumber, formatUSD } from "../format";
 import { dollarsToCents } from "../money";
+import { useAccounts } from "../hooks";
+import { AmountField, Banner, EmptyState, IconCheck, Page } from "../ui";
 
 export function TransfersPage() {
-  const [accounts, setAccounts] = useState<BankAccount[]>([]);
-  const [fromId, setFromId] = useState("");
+  const { accounts, error, setError, reload } = useAccounts();
   const [toNumber, setToNumber] = useState("");
   const [amount, setAmount] = useState("10.00");
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
+  const [sent, setSent] = useState<{ amount: string; to: string } | null>(null);
 
-  useEffect(() => {
-    listAccounts()
-      .then((data) => {
-        setAccounts(data.accounts);
-        if (data.accounts[0]) setFromId(data.accounts[0].id);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load accounts"));
-  }, []);
+  const selected = accounts?.[0];
+  const blocked = selected != null && selected.status !== "active";
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!selected) return;
     const cents = dollarsToCents(amount);
     if (cents == null || cents <= 0) {
-      setError("Enter a dollar amount with at most two decimals");
+      setError("Enter an amount with at most two decimals");
+      return;
+    }
+    if (toNumber.length !== 8) {
+      setError("Destination is an 8-digit account number");
       return;
     }
     if (blocked) {
-      setError(`This account cannot send money while ${selected?.status}.`);
+      setError("This account cannot send money right now.");
       return;
     }
     setError("");
-    setNotice("");
     setPending(true);
     try {
-      const res = await createTransfer(fromId, toNumber, cents, crypto.randomUUID());
-      setNotice(
-        res.transfer.replay
-          ? "Idempotent replay; balances were not moved again."
-          : `Sent. Destination ${res.transfer.to_account_number}.`,
-      );
-      const data = await listAccounts();
-      setAccounts(data.accounts);
+      const res = await createTransfer(selected.id, toNumber, cents, crypto.randomUUID());
+      await reload();
+      setSent({ amount: formatUSD(cents), to: formatAccountNumber(res.transfer.to_account_number) });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Transfer failed");
     } finally {
@@ -50,39 +45,65 @@ export function TransfersPage() {
     }
   }
 
-  const selected = accounts.find((a) => a.id === fromId);
-  const blocked = selected != null && selected.status !== "active";
+  if (!accounts) {
+    return <p className="kicker">Loading…</p>;
+  }
 
   if (accounts.length === 0) {
     return (
-      <div>
-        <h1>Transfers</h1>
-        <p className="lede">Open and fund a deposit account before sending money.</p>
-      </div>
+      <Page title="Send">
+        <EmptyState
+          title="Open an account first"
+          body="You need a USD account before you can send money."
+          action={
+            <Link className="btn btn-primary" to="/accounts">
+              Go to account
+            </Link>
+          }
+        />
+      </Page>
+    );
+  }
+
+  if (sent) {
+    return (
+      <Page title="Send">
+        <div className="send-card success">
+          <div className="success-mark">
+            <IconCheck />
+          </div>
+          <h2>You sent {sent.amount}</h2>
+          <p>To {sent.to}</p>
+          <button
+            className="btn btn-primary btn-block"
+            type="button"
+            onClick={() => {
+              setSent(null);
+              setToNumber("");
+            }}
+          >
+            Send again
+          </button>
+        </div>
+      </Page>
     );
   }
 
   return (
-    <div>
-      <h1>Transfers</h1>
-      <p className="lede">Debit your liability account and credit another customer by account number. Each submit uses a new idempotency key.</p>
-      {error ? <p className="error">{error}</p> : null}
-      {notice ? <p className="lede">{notice}</p> : null}
-      {blocked ? <p className="error">This account cannot send money while {selected?.status}.</p> : null}
-      <form className="card" onSubmit={onSubmit}>
+    <Page title="Send" kicker="USD">
+      {error ? <Banner>{error}</Banner> : null}
+      {blocked ? (
+        <Banner>
+          This account is {selected?.status}. Unfreeze it in Account to send.
+        </Banner>
+      ) : null}
+      <form className="send-card" onSubmit={onSubmit}>
+        <AmountField value={amount} onChange={setAmount} disabled={blocked} />
+        <p className="avail">Available {formatUSD(selected?.balance_cents ?? 0)}</p>
         <label>
-          From
-          <select value={fromId} onChange={(e) => setFromId(e.target.value)}>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.account_number} ({a.status})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Destination account number
+          To
           <input
+            className="digits"
             value={toNumber}
             onChange={(e) => setToNumber(e.target.value.replace(/\D/g, "").slice(0, 8))}
             required
@@ -91,16 +112,13 @@ export function TransfersPage() {
             pattern="[0-9]{8}"
             maxLength={8}
             placeholder="00000000"
+            autoComplete="off"
           />
         </label>
-        <label>
-          Amount (USD)
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} required disabled={blocked} />
-        </label>
-        <button type="submit" disabled={pending || blocked}>
+        <button className="btn btn-primary btn-block" type="submit" disabled={pending || blocked}>
           {pending ? "Sending…" : "Send"}
         </button>
       </form>
-    </div>
+    </Page>
   );
 }

@@ -1,8 +1,32 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, type ReactNode, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ApiError } from "../api";
 import { useAuth } from "../auth";
 import { BANK_NAME } from "../brand";
+
+function AuthFrame({
+  title,
+  lede,
+  children,
+}: {
+  title: string;
+  lede: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="auth">
+      <div className="auth-inner">
+        <div className="auth-brand">
+          <span className="logo-mark">B</span>
+          <strong>{BANK_NAME}</strong>
+        </div>
+        <h1>{title}</h1>
+        <p className="lede">{lede}</p>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export function LoginPage() {
   const { customer, login } = useAuth();
@@ -31,49 +55,38 @@ export function LoginPage() {
   }
 
   return (
-    <div className="gate">
-      <aside className="gate-brand">
-        <p className="eyebrow">Internet banking</p>
-        <h1>{BANK_NAME}</h1>
-        <p className="lede">
-          Demo internet bank. Phase one is identity only; accounts, transfers, and
-          double-entry posting come later. No fake balances.
+    <AuthFrame title="Welcome back" lede="Sign in to send money, add funds, and check your activity.">
+      <form className="stack" onSubmit={onSubmit}>
+        <label>
+          Email
+          <input
+            type="email"
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+          />
+        </label>
+        {error ? <p className="banner banner-error">{error}</p> : null}
+        <button className="btn btn-primary btn-block" type="submit" disabled={pending}>
+          {pending ? "Signing in…" : "Sign in"}
+        </button>
+        <p className="muted">
+          New here? <Link to="/register">Create a profile</Link>
         </p>
-      </aside>
-      <main className="gate-panel">
-        <form className="card" onSubmit={onSubmit}>
-          <h2>Sign in</h2>
-          <label>
-            Email
-            <input
-              type="email"
-              autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-            />
-          </label>
-          {error ? <p className="error">{error}</p> : null}
-          <button type="submit" disabled={pending}>
-            {pending ? "Signing in…" : "Sign in"}
-          </button>
-          <p className="muted">
-            No customer profile yet? <Link to="/register">Register</Link>
-          </p>
-        </form>
-      </main>
-    </div>
+      </form>
+    </AuthFrame>
   );
 }
 
@@ -102,48 +115,37 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="gate">
-      <aside className="gate-brand">
-        <p className="eyebrow">Internet banking</p>
-        <h1>Create your profile</h1>
-        <p className="lede">
-          Registration creates a customer identity, not a deposit account. Passwords
-          are stored with Argon2id.
+    <AuthFrame title="Create your profile" lede="Use an email and a password with at least 8 characters.">
+      <form className="stack" onSubmit={onSubmit}>
+        <label>
+          Email
+          <input
+            type="email"
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+          />
+        </label>
+        {error ? <p className="banner banner-error">{error}</p> : null}
+        <button className="btn btn-primary btn-block" type="submit" disabled={pending}>
+          {pending ? "Creating profile…" : "Continue"}
+        </button>
+        <p className="muted">
+          Already registered? <Link to="/login">Sign in</Link>
         </p>
-      </aside>
-      <main className="gate-panel">
-        <form className="card" onSubmit={onSubmit}>
-          <h2>Register</h2>
-          <label>
-            Email
-            <input
-              type="email"
-              autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Password (at least 8 characters)
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-            />
-          </label>
-          {error ? <p className="error">{error}</p> : null}
-          <button type="submit" disabled={pending}>
-            {pending ? "Creating profile…" : "Register"}
-          </button>
-          <p className="muted">
-            Already registered? <Link to="/login">Sign in</Link>
-          </p>
-        </form>
-      </main>
-    </div>
+      </form>
+    </AuthFrame>
   );
 }
