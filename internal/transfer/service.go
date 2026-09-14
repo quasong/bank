@@ -54,17 +54,11 @@ func (s *Service) Execute(ctx context.Context, customerID, fromID uuid.UUID, toN
 	if from.ID == to.ID {
 		return Result{}, account.ErrSameAccount
 	}
-	if !from.Status.OpenForMoney() {
-		if from.Status == account.StatusClosed {
-			return Result{}, account.ErrClosed
-		}
-		return Result{}, account.ErrFrozen
+	if err := from.Status.MoneyError(); err != nil {
+		return Result{}, err
 	}
-	if !to.Status.OpenForMoney() {
-		if to.Status == account.StatusClosed {
-			return Result{}, account.ErrClosed
-		}
-		return Result{}, account.ErrFrozen
+	if err := to.Status.MoneyError(); err != nil {
+		return Result{}, err
 	}
 	if from.BalanceCents < amountCents {
 		return Result{}, account.ErrInsufficient

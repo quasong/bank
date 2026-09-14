@@ -27,6 +27,10 @@ export function TransfersPage() {
       setError("Enter a dollar amount with at most two decimals");
       return;
     }
+    if (blocked) {
+      setError(`This account cannot send money while ${selected?.status}.`);
+      return;
+    }
     setError("");
     setNotice("");
     setPending(true);
@@ -46,6 +50,9 @@ export function TransfersPage() {
     }
   }
 
+  const selected = accounts.find((a) => a.id === fromId);
+  const blocked = selected != null && selected.status !== "active";
+
   if (accounts.length === 0) {
     return (
       <div>
@@ -61,13 +68,14 @@ export function TransfersPage() {
       <p className="lede">Debit your liability account and credit another customer by account number. Each submit uses a new idempotency key.</p>
       {error ? <p className="error">{error}</p> : null}
       {notice ? <p className="lede">{notice}</p> : null}
+      {blocked ? <p className="error">This account cannot send money while {selected?.status}.</p> : null}
       <form className="card" onSubmit={onSubmit}>
         <label>
           From
           <select value={fromId} onChange={(e) => setFromId(e.target.value)}>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.account_number}
+                {a.account_number} ({a.status})
               </option>
             ))}
           </select>
@@ -78,6 +86,7 @@ export function TransfersPage() {
             value={toNumber}
             onChange={(e) => setToNumber(e.target.value.replace(/\D/g, "").slice(0, 8))}
             required
+            disabled={blocked}
             inputMode="numeric"
             pattern="[0-9]{8}"
             maxLength={8}
@@ -86,9 +95,9 @@ export function TransfersPage() {
         </label>
         <label>
           Amount (USD)
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          <input value={amount} onChange={(e) => setAmount(e.target.value)} required disabled={blocked} />
         </label>
-        <button type="submit" disabled={pending}>
+        <button type="submit" disabled={pending || blocked}>
           {pending ? "Sending…" : "Send"}
         </button>
       </form>

@@ -37,3 +37,26 @@ func TestFundRejectsFloatCents(t *testing.T) {
 		t.Fatalf("body %s", rec.Body.String())
 	}
 }
+
+func TestWithdrawRejectsFloatCents(t *testing.T) {
+	store := NewMemStore()
+	svc := NewService(store)
+	h := NewHandler(svc)
+	cid := uuid.New()
+	acct, err := svc.Open(t.Context(), cid)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := chi.NewRouter()
+	r.Post("/api/v1/accounts/{id}/withdrawals", func(w http.ResponseWriter, req *http.Request) {
+		h.Withdraw(w, req.WithContext(auth.WithCustomerID(req.Context(), cid)))
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/accounts/"+acct.ID.String()+"/withdrawals", strings.NewReader(`{"amount_cents":10.5,"idempotency_key":"k"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+}

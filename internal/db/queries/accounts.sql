@@ -23,3 +23,13 @@ SELECT id, customer_id, account_number, status, balance_cents, opened_at
 FROM accounts
 WHERE customer_id = $1
 ORDER BY opened_at;
+
+-- name: LockAccountByID :one
+SELECT a.id, a.customer_id, a.account_number, a.status, a.balance_cents, a.opened_at, la.id AS ledger_id
+FROM accounts a
+JOIN ledger_accounts la ON la.account_id = a.id
+WHERE a.id = $1
+FOR UPDATE OF a;
+
+-- name: UpdateAccountStatus :exec
+UPDATE accounts SET status = $2 WHERE id = $1;

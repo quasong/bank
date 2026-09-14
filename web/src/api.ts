@@ -121,6 +121,25 @@ export function fundAccount(id: string, amountCents: number, idempotencyKey: str
   });
 }
 
+export function withdrawAccount(id: string, amountCents: number, idempotencyKey: string) {
+  return request<{ account: BankAccount; replay: boolean }>(`/api/v1/accounts/${id}/withdrawals`, {
+    method: "POST",
+    body: JSON.stringify({ amount_cents: amountCents, idempotency_key: idempotencyKey }),
+  });
+}
+
+export function freezeAccount(id: string) {
+  return request<{ account: BankAccount }>(`/api/v1/accounts/${id}/freeze`, { method: "POST" });
+}
+
+export function unfreezeAccount(id: string) {
+  return request<{ account: BankAccount }>(`/api/v1/accounts/${id}/unfreeze`, { method: "POST" });
+}
+
+export function closeAccount(id: string) {
+  return request<{ account: BankAccount }>(`/api/v1/accounts/${id}/close`, { method: "POST" });
+}
+
 export function createTransfer(fromAccountId: string, toAccountNumber: string, amountCents: number, idempotencyKey: string) {
   return request<{ transfer: { replay: boolean; from_balance_cents: number; to_account_number: string } }>(
     "/api/v1/transfers",

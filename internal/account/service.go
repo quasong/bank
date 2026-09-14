@@ -18,6 +18,7 @@ type Store interface {
 	GetByCustomer(ctx context.Context, customerID uuid.UUID) (Account, error)
 	GetByNumber(ctx context.Context, number string) (Account, error)
 	ListByCustomer(ctx context.Context, customerID uuid.UUID) ([]Account, error)
+	SetStatus(ctx context.Context, id uuid.UUID, next Status) (Account, error)
 	Post(ctx context.Context, journal ledger.Journal, deltas map[uuid.UUID]int64) (ledger.Journal, bool, error)
 	Activity(ctx context.Context, accountID uuid.UUID, limit, offset int32) ([]ledger.Entry, error)
 }
@@ -94,11 +95,8 @@ func (s *Service) Fund(ctx context.Context, customerID, accountID uuid.UUID, amo
 	if err != nil {
 		return Account{}, ledger.Journal{}, false, err
 	}
-	if !acct.Status.OpenForMoney() {
-		if acct.Status == StatusClosed {
-			return Account{}, ledger.Journal{}, false, ErrClosed
-		}
-		return Account{}, ledger.Journal{}, false, ErrFrozen
+	if err := acct.Status.MoneyError(); err != nil {
+		return Account{}, ledger.Journal{}, false, err
 	}
 	j := ledger.Journal{
 		ID:             uuid.New(),
@@ -132,6 +130,61 @@ func (s *Service) Activity(ctx context.Context, customerID, accountID uuid.UUID,
 		offset = 0
 	}
 	return s.store.Activity(ctx, accountID, limit, offset)
+}
+
+func (s *Service) Freeze(ctx context.Context, customerID, accountID uuid.UUID) (Account, error) {
+	return s.setOwnedStatus(ctx, customerID, accountID, StatusFrozen)
+}
+
+func (s *Service) Unfreeze(ctx context.Context, customerID, accountID uuid.UUID) (Account, error) {
+	return s.setOwnedStatus(ctx, customerID, accountID, StatusActive)
+}
+
+func (s *Service) Close(ctx context.Context, customerID, accountID uuid.UUID) (Account, error) {
+	return s.setOwnedStatus(ctx, customerID, accountID, StatusClosed)
+}
+
+func (s *Service) setOwnedStatus(ctx context.Context, customerID, accountID uuid.UUID, next Status) (Account, error) {
+	if _, err := s.GetOwned(ctx, customerID, accountID); err != nil {
+		return Account{}, err
+	}
+	return s.store.SetStatus(ctx, accountID, next)
+}
+
+func (s *Service) Withdraw(ctx context.Context, customerID, accountID uuid.UUID, amountCents int64, idempotencyKey string) (Account, ledger.Journal, bool, error) {
+	if amountCents <= 0 {
+		return Account{}, ledger.Journal{}, false, ErrInvalidAmount
+	}
+	key := strings.TrimSpace(idempotencyKey)
+	if key == "" {
+		return Account{}, ledger.Journal{}, false, ErrIdempotency
+	}
+	acct, err := s.GetOwned(ctx, customerID, accountID)
+	if err != nil {
+		return Account{}, ledger.Journal{}, false, err
+	}
+	if err := acct.Status.MoneyError(); err != nil {
+		return Account{}, ledger.Journal{}, false, err
+	}
+	j := ledger.Journal{
+		ID:             uuid.New(),
+		Description:    fmt.Sprintf("Withdrawal %d cents from %s", amountCents, acct.AccountNumber),
+		Kind:           ledger.KindWithdrawal,
+		IdempotencyKey: key,
+		Lines: []ledger.Line{
+			{LedgerAccountID: acct.LedgerID, Side: ledger.Debit, AmountCents: amountCents},
+			{LedgerAccountID: ledger.VaultID, Side: ledger.Credit, AmountCents: amountCents},
+		},
+	}
+	posted, replay, err := s.store.Post(ctx, j, map[uuid.UUID]int64{acct.ID: -amountCents})
+	if err != nil {
+		return Account{}, ledger.Journal{}, false, err
+	}
+	fresh, err := s.store.GetByID(ctx, acct.ID)
+	if err != nil {
+		return Account{}, ledger.Journal{}, false, err
+	}
+	return fresh, posted, replay, nil
 }
 
 func newAccountNumber() (string, error) {

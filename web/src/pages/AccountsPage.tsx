@@ -1,12 +1,24 @@
 import { FormEvent, useEffect, useState } from "react";
-import { ApiError, fundAccount, listAccounts, openAccount, type BankAccount } from "../api";
+import {
+  ApiError,
+  closeAccount,
+  freezeAccount,
+  fundAccount,
+  listAccounts,
+  openAccount,
+  unfreezeAccount,
+  withdrawAccount,
+  type BankAccount,
+} from "../api";
 import { centsToDollars, dollarsToCents } from "../money";
+
+type MoneyForm = { id: string; kind: "fund" | "withdraw" };
 
 export function AccountsPage() {
   const [accounts, setAccounts] = useState<BankAccount[] | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const [fundId, setFundId] = useState<string | null>(null);
+  const [form, setForm] = useState<MoneyForm | null>(null);
   const [amount, setAmount] = useState("100.00");
 
   async function reload() {
@@ -31,9 +43,9 @@ export function AccountsPage() {
     }
   }
 
-  async function onFund(e: FormEvent) {
+  async function onMoney(e: FormEvent) {
     e.preventDefault();
-    if (!fundId) return;
+    if (!form) return;
     const cents = dollarsToCents(amount);
     if (cents == null || cents <= 0) {
       setError("Enter a dollar amount with at most two decimals");
@@ -42,11 +54,29 @@ export function AccountsPage() {
     setError("");
     setPending(true);
     try {
-      await fundAccount(fundId, cents, crypto.randomUUID());
-      setFundId(null);
+      if (form.kind === "fund") {
+        await fundAccount(form.id, cents, crypto.randomUUID());
+      } else {
+        await withdrawAccount(form.id, cents, crypto.randomUUID());
+      }
+      setForm(null);
       await reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Funding failed");
+      setError(err instanceof ApiError ? err.message : "Posting failed");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function runStatus(action: () => Promise<unknown>) {
+    setError("");
+    setPending(true);
+    try {
+      await action();
+      setForm(null);
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update account");
     } finally {
       setPending(false);
     }
@@ -59,7 +89,10 @@ export function AccountsPage() {
   return (
     <div>
       <h1>Accounts</h1>
-      <p className="lede">Demand-deposit balances come from the ledger. Add funds is a demo credit from vault cash.</p>
+      <p className="lede">
+        Demand-deposit balances come from the ledger. Add funds credits vault cash; withdraw is the reverse.
+        Freeze stops money movement. Close requires a zero balance.
+      </p>
       {error ? <p className="error">{error}</p> : null}
       {accounts.length === 0 ? (
         <div className="tile">
@@ -76,7 +109,6 @@ export function AccountsPage() {
                 <th>Number</th>
                 <th>Status</th>
                 <th>Balance</th>
-                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -85,26 +117,64 @@ export function AccountsPage() {
                   <td className="money">{a.account_number}</td>
                   <td>{a.status}</td>
                   <td className="money">${centsToDollars(a.balance_cents)}</td>
-                  <td>
-                    {a.status === "active" ? (
-                      <button type="button" className="ghost" onClick={() => setFundId(a.id)}>
-                        Add funds
-                      </button>
-                    ) : null}
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {fundId ? (
-            <form className="card" style={{ marginTop: 24 }} onSubmit={onFund}>
-              <h2>Add funds</h2>
+          {accounts.map((a) =>
+            a.status === "closed" ? null : (
+              <div key={a.id + "-actions"} className="row-actions" style={{ marginTop: 16 }}>
+                {a.status === "active" ? (
+                  <>
+                    <button type="button" className="ghost" onClick={() => setForm({ id: a.id, kind: "fund" })}>
+                      Add funds
+                    </button>
+                    <button type="button" className="ghost" onClick={() => setForm({ id: a.id, kind: "withdraw" })}>
+                      Withdraw
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={pending}
+                      onClick={() => runStatus(() => freezeAccount(a.id))}
+                    >
+                      Freeze
+                    </button>
+                  </>
+                ) : null}
+                {a.status === "frozen" ? (
+                  <button
+                    type="button"
+                    className="ghost"
+                    disabled={pending}
+                    onClick={() => runStatus(() => unfreezeAccount(a.id))}
+                  >
+                    Unfreeze
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={pending}
+                  onClick={() => {
+                    if (!window.confirm("Close this account? This cannot be undone.")) return;
+                    void runStatus(() => closeAccount(a.id));
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            ),
+          )}
+          {form ? (
+            <form className="card" style={{ marginTop: 24 }} onSubmit={onMoney}>
+              <h2>{form.kind === "fund" ? "Add funds" : "Withdraw"}</h2>
               <label>
                 Amount (USD)
                 <input value={amount} onChange={(e) => setAmount(e.target.value)} required />
               </label>
               <button type="submit" disabled={pending}>
-                {pending ? "Posting…" : "Credit account"}
+                {pending ? "Posting…" : form.kind === "fund" ? "Credit account" : "Debit account"}
               </button>
             </form>
           ) : null}

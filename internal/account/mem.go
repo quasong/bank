@@ -91,15 +91,20 @@ func (m *MemStore) ListByCustomer(_ context.Context, customerID uuid.UUID) ([]Ac
 	return out, nil
 }
 
-func (m *MemStore) Freeze(id uuid.UUID) {
+func (m *MemStore) SetStatus(_ context.Context, id uuid.UUID, next Status) (Account, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	a, ok := m.accounts[id]
 	if !ok {
-		return
+		return Account{}, ErrNotFound
 	}
-	a.Status = StatusFrozen
+	want, err := Transition(a, next)
+	if err != nil {
+		return Account{}, err
+	}
+	a.Status = want
 	m.accounts[id] = a
+	return a, nil
 }
 
 func (m *MemStore) Post(_ context.Context, journal ledger.Journal, deltas map[uuid.UUID]int64) (ledger.Journal, bool, error) {
@@ -124,11 +129,8 @@ func (m *MemStore) Post(_ context.Context, journal ledger.Journal, deltas map[uu
 		if !ok {
 			return ledger.Journal{}, false, ErrNotFound
 		}
-		if !a.Status.OpenForMoney() {
-			if a.Status == StatusClosed {
-				return ledger.Journal{}, false, ErrClosed
-			}
-			return ledger.Journal{}, false, ErrFrozen
+		if err := a.Status.MoneyError(); err != nil {
+			return ledger.Journal{}, false, err
 		}
 		next := a.BalanceCents + deltas[id]
 		if next < 0 {

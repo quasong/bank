@@ -12,8 +12,9 @@ var VaultID = uuid.MustParse("11111111-1111-1111-1111-111111111111")
 type Kind string
 
 const (
-	KindFunding  Kind = "funding"
-	KindTransfer Kind = "transfer"
+	KindFunding    Kind = "funding"
+	KindTransfer   Kind = "transfer"
+	KindWithdrawal Kind = "withdrawal"
 )
 
 type Side string

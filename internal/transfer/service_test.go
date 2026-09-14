@@ -89,7 +89,9 @@ func TestTransferFrozen(t *testing.T) {
 	from, _ := accounts.Open(ctx, aCust)
 	to, _ := accounts.Open(ctx, bCust)
 	_, _, _, _ = accounts.Fund(ctx, aCust, from.ID, 100, "fund")
-	store.Freeze(from.ID)
+	if _, err := accounts.Freeze(ctx, aCust, from.ID); err != nil {
+		t.Fatal(err)
+	}
 	_, err := svc.Execute(ctx, aCust, from.ID, to.AccountNumber, 10, "xfer")
 	if !errors.Is(err, account.ErrFrozen) {
 		t.Fatalf("got %v", err)

@@ -77,6 +77,10 @@ Deposits are ledger liabilities. Demo funding debits vault cash and credits the 
 | GET | `/api/v1/accounts` | List mine |
 | GET | `/api/v1/accounts/{id}` | Detail and cached balance |
 | POST | `/api/v1/accounts/{id}/funding` | Demo inbound credit (`amount_cents`, `idempotency_key`) |
+| POST | `/api/v1/accounts/{id}/withdrawals` | Demo outbound debit to vault cash |
+| POST | `/api/v1/accounts/{id}/freeze` | Stop funding, withdrawals, and transfers |
+| POST | `/api/v1/accounts/{id}/unfreeze` | Return a frozen account to active |
+| POST | `/api/v1/accounts/{id}/close` | Close when `balance_cents` is 0; terminal |
 | POST | `/api/v1/transfers` | `{from_account_id, to_account_number, amount_cents, idempotency_key}` |
 | GET | `/api/v1/accounts/{id}/activity` | Journal lines for that account |
 

@@ -100,6 +100,38 @@ func (s *Store) ListByCustomer(ctx context.Context, customerID uuid.UUID) ([]acc
 	return out, rows.Err()
 }
 
+func (s *Store) SetStatus(ctx context.Context, id uuid.UUID, next account.Status) (account.Account, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return account.Account{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	acct, err := s.scanAccount(ctx, tx, `
+		SELECT a.id, a.customer_id, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
+		FROM accounts a
+		JOIN ledger_accounts la ON la.account_id = a.id
+		WHERE a.id = $1
+		FOR UPDATE OF a`, id)
+	if err != nil {
+		return account.Account{}, err
+	}
+	want, err := account.Transition(acct, next)
+	if err != nil {
+		return account.Account{}, err
+	}
+	if want != acct.Status {
+		if _, err := tx.Exec(ctx, `UPDATE accounts SET status = $2 WHERE id = $1`, id, string(want)); err != nil {
+			return account.Account{}, err
+		}
+		acct.Status = want
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return account.Account{}, err
+	}
+	return acct, nil
+}
+
 func (s *Store) Post(ctx context.Context, journal ledger.Journal, deltas map[uuid.UUID]int64) (ledger.Journal, bool, error) {
 	if err := ledger.Validate(journal.Lines); err != nil {
 		return ledger.Journal{}, false, err
@@ -128,11 +160,8 @@ func (s *Store) Post(ctx context.Context, journal ledger.Journal, deltas map[uui
 		if err != nil {
 			return ledger.Journal{}, false, err
 		}
-		if status != string(account.StatusActive) {
-			if status == string(account.StatusClosed) {
-				return ledger.Journal{}, false, account.ErrClosed
-			}
-			return ledger.Journal{}, false, account.ErrFrozen
+		if err := account.Status(status).MoneyError(); err != nil {
+			return ledger.Journal{}, false, err
 		}
 	}
 

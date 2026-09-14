@@ -14,4 +14,5 @@ var (
 	ErrInvalidRequest = errors.New("invalid request")
 	ErrSameAccount    = errors.New("same account")
 	ErrNumberTaken    = errors.New("account number taken")
+	ErrHasBalance     = errors.New("account has balance")
 )

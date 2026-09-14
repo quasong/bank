@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -117,6 +118,63 @@ func (h *Handler) Fund(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
+	customerID, acctID, ok := pathAccount(w, r)
+	if !ok {
+		return
+	}
+	var raw map[string]json.RawMessage
+	if err := moneyjson.Decode(r.Body, &raw); err != nil {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+		return
+	}
+	amount, err := moneyjson.PositiveCents(raw["amount_cents"])
+	if err != nil {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "amount_cents must be a positive integer")
+		return
+	}
+	key, _ := moneyjson.String(raw["idempotency_key"])
+	acct, journal, replay, err := h.svc.Withdraw(r.Context(), customerID, acctID, amount, key)
+	if err != nil {
+		writeAccountError(w, err)
+		return
+	}
+	status := http.StatusCreated
+	if replay {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, map[string]any{
+		"account": toAccountBody(acct),
+		"journal": toJournalBody(journal),
+		"replay":  replay,
+	})
+}
+
+func (h *Handler) Freeze(w http.ResponseWriter, r *http.Request) {
+	h.writeStatusChange(w, r, h.svc.Freeze)
+}
+
+func (h *Handler) Unfreeze(w http.ResponseWriter, r *http.Request) {
+	h.writeStatusChange(w, r, h.svc.Unfreeze)
+}
+
+func (h *Handler) Close(w http.ResponseWriter, r *http.Request) {
+	h.writeStatusChange(w, r, h.svc.Close)
+}
+
+func (h *Handler) writeStatusChange(w http.ResponseWriter, r *http.Request, fn func(ctx context.Context, customerID, accountID uuid.UUID) (Account, error)) {
+	customerID, acctID, ok := pathAccount(w, r)
+	if !ok {
+		return
+	}
+	acct, err := fn(r.Context(), customerID, acctID)
+	if err != nil {
+		writeAccountError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"account": toAccountBody(acct)})
+}
+
 func (h *Handler) Activity(w http.ResponseWriter, r *http.Request) {
 	customerID, acctID, ok := pathAccount(w, r)
 	if !ok {
@@ -202,8 +260,12 @@ func writeAccountError(w http.ResponseWriter, err error) {
 		auth.WriteError(w, http.StatusConflict, "account_exists", "a deposit account already exists")
 	case errors.Is(err, ErrNotFound):
 		auth.WriteError(w, http.StatusNotFound, "account_not_found", "account not found")
-	case errors.Is(err, ErrFrozen), errors.Is(err, ErrClosed):
+	case errors.Is(err, ErrFrozen):
 		auth.WriteError(w, http.StatusForbidden, "account_frozen", "account cannot move money")
+	case errors.Is(err, ErrClosed):
+		auth.WriteError(w, http.StatusForbidden, "account_closed", "account is closed")
+	case errors.Is(err, ErrHasBalance):
+		auth.WriteError(w, http.StatusConflict, "account_has_balance", "withdraw remaining funds before closing")
 	case errors.Is(err, ErrInsufficient):
 		auth.WriteError(w, http.StatusConflict, "insufficient_funds", "insufficient funds")
 	case errors.Is(err, ErrSameAccount):

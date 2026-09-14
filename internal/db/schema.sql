@@ -54,7 +54,7 @@ CREATE TABLE journals (
     id UUID PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     description TEXT NOT NULL,
-    kind TEXT NOT NULL CHECK (kind IN ('funding', 'transfer')),
+    kind TEXT NOT NULL CHECK (kind IN ('funding', 'transfer', 'withdrawal')),
     idempotency_key TEXT NOT NULL UNIQUE
 );
 
