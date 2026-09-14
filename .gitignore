@@ -1,0 +1,11 @@
+.env
+bin/
+tmp/
+coverage.out
+*.test
+.DS_Store
+web/node_modules
+web/dist
+.gopath
+.gocache
+
