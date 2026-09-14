@@ -10,10 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"bank/internal/account"
 	"bank/internal/auth"
 	"bank/internal/config"
 	"bank/internal/db"
 	"bank/internal/httpapi"
+	"bank/internal/transfer"
 )
 
 func main() {
@@ -41,9 +43,12 @@ func run(log *slog.Logger) error {
 
 	store := db.NewStore(pool)
 	tokens := auth.NewTokenManager(cfg.JWTSecret, 15*time.Minute)
-	svc := auth.NewService(store, auth.NewArgon2Hasher(), tokens, 7*24*time.Hour)
-	h := auth.NewHandler(svc, cfg.CookieSecure)
-	handler := httpapi.New(h, cfg.WebDist, log)
+	authSvc := auth.NewService(store, auth.NewArgon2Hasher(), tokens, 7*24*time.Hour)
+	authH := auth.NewHandler(authSvc, cfg.CookieSecure)
+	accountSvc := account.NewService(store)
+	accountH := account.NewHandler(accountSvc)
+	transferH := transfer.NewHandler(transfer.NewService(store))
+	handler := httpapi.New(authH, accountH, transferH, cfg.WebDist, log)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

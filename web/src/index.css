@@ -234,6 +234,32 @@ button.ghost {
   max-width: 560px;
 }
 
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  background: var(--card);
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.money {
+  font-variant-numeric: tabular-nums;
+}
+
+select {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  padding: 10px 12px;
+  font: inherit;
+}
+
 @media (max-width: 860px) {
   .gate,
   .shell,

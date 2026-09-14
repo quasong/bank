@@ -87,3 +87,55 @@ export function logout() {
 export function fetchMe() {
   return request<{ customer: Customer }>("/api/v1/me");
 }
+
+export type BankAccount = {
+  id: string;
+  account_number: string;
+  status: string;
+  balance_cents: number;
+  opened_at: string;
+};
+
+export type ActivityItem = {
+  journal_id: string;
+  created_at: string;
+  kind: string;
+  description: string;
+  side: string;
+  amount_cents: number;
+  signed_cents: number;
+};
+
+export function listAccounts() {
+  return request<{ accounts: BankAccount[] }>("/api/v1/accounts");
+}
+
+export function openAccount() {
+  return request<{ account: BankAccount }>("/api/v1/accounts", { method: "POST" });
+}
+
+export function fundAccount(id: string, amountCents: number, idempotencyKey: string) {
+  return request<{ account: BankAccount; replay: boolean }>(`/api/v1/accounts/${id}/funding`, {
+    method: "POST",
+    body: JSON.stringify({ amount_cents: amountCents, idempotency_key: idempotencyKey }),
+  });
+}
+
+export function createTransfer(fromAccountId: string, toAccountNumber: string, amountCents: number, idempotencyKey: string) {
+  return request<{ transfer: { replay: boolean; from_balance_cents: number; to_account_number: string } }>(
+    "/api/v1/transfers",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        from_account_id: fromAccountId,
+        to_account_number: toAccountNumber,
+        amount_cents: amountCents,
+        idempotency_key: idempotencyKey,
+      }),
+    },
+  );
+}
+
+export function listActivity(accountId: string) {
+  return request<{ items: ActivityItem[] }>(`/api/v1/accounts/${accountId}/activity`);
+}

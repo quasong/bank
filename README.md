@@ -2,24 +2,24 @@
 
 Go internet-banking demo. This is not a licensed bank and holds no real funds.
 
-Phase one ships **customer authentication** and a web console you can sign in to. Accounts, transfers, and activity are placeholders; there is no ledger yet.
+Phase one shipped authentication. This codebase also has the **deposit money path**: open an account, demo funding, customer-to-customer transfer, and activity from the journal.
 
 ## Architecture
 
 Modular monolith on PostgreSQL. A `customer` is a person; an `account` is a deposit product. Signing in does not open an account.
 
-SQL lives in `internal/db/queries` and `migrations`. Runtime execution is pgx in `internal/db/store.go`.
+SQL lives in `internal/db/queries` and `migrations`. Runtime execution is pgx in `internal/db/store.go` and `internal/db/money.go`.
 
-Later transfers use double-entry bookkeeping: customer deposits are bank liabilities, a transfer is a debit/credit pair in one transaction, and amounts are integer cents (`int64`), never `float64`. Phase one creates auth tables only.
+Customer deposits are bank liabilities. A transfer is a debit/credit pair in one transaction. Amounts are integer cents (`int64`), never `float64`.
 
 ```
 cmd/server          HTTP entry (API + optional static UI)
 internal/auth       register / login / refresh / logout
 internal/customer   customer profile
 internal/audit      audit action names
-internal/account    reserved: deposit accounts
-internal/ledger     reserved: journal
-internal/transfer   reserved: transfer orchestration
+internal/account    demand-deposit accounts and funding
+internal/ledger     journal validation and types
+internal/transfer   customer-to-customer transfers
 internal/httpapi    router and middleware
 web                 React console
 ```
@@ -67,6 +67,21 @@ See [.env.example](.env.example). `JWT_SECRET` must be at least 32 bytes. Local 
 - Login is rate-limited by IP + email
 - Error body: `{"error":{"code":"...","message":"..."}}`
 
+## Accounts and money
+
+Deposits are ledger liabilities. Demo funding debits vault cash and credits the customer account. A transfer debits the sender and credits the destination in one transaction. Amounts are integer cents.
+
+| Method | Path | Notes |
+|------|------|------|
+| POST | `/api/v1/accounts` | Open a demand-deposit account |
+| GET | `/api/v1/accounts` | List mine |
+| GET | `/api/v1/accounts/{id}` | Detail and cached balance |
+| POST | `/api/v1/accounts/{id}/funding` | Demo inbound credit (`amount_cents`, `idempotency_key`) |
+| POST | `/api/v1/transfers` | `{from_account_id, to_account_number, amount_cents, idempotency_key}` |
+| GET | `/api/v1/accounts/{id}/activity` | Journal lines for that account |
+
+Replay the same idempotency key to receive the original journal without moving money twice.
+
 ```bash
 curl -s -X POST http://127.0.0.1:8080/api/v1/auth/register \
   -H 'Content-Type: application/json' \
@@ -78,10 +93,3 @@ curl -s -X POST http://127.0.0.1:8080/api/v1/auth/register \
 ```bash
 make test
 ```
-
-## Later: accounts and transfers
-
-1. Add `accounts` and journal tables in a new goose migration. Do not store balances on `customers`.
-2. Write journal lines in `internal/ledger`. `internal/account` only projects balances.
-3. Orchestrate in `internal/transfer`: frozen/closed checks, idempotency key, one transaction.
-4. Turn on the Accounts / Transfers / Activity pages. Still no fake data.

@@ -1,4 +1,4 @@
-// Package ledger will be the source of truth for money (phase 2+).
+// Package ledger is the source of truth for money.
 //
 // Customer deposits are liabilities of the bank. A transfer is a pair of
 // journal lines, not an UPDATE of two balance columns. Amounts are integer

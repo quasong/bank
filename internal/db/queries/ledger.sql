@@ -1,0 +1,50 @@
+-- name: InsertLedgerAccount :exec
+INSERT INTO ledger_accounts (id, name, kind, account_id)
+VALUES ($1, $2, $3, $4);
+
+-- name: GetLedgerAccountByDeposit :one
+SELECT id, name, kind, account_id, created_at
+FROM ledger_accounts
+WHERE account_id = $1;
+
+-- name: InsertJournal :one
+INSERT INTO journals (id, description, kind, idempotency_key)
+VALUES ($1, $2, $3, $4)
+RETURNING id, created_at, description, kind, idempotency_key;
+
+-- name: GetJournalByIdempotencyKey :one
+SELECT id, created_at, description, kind, idempotency_key
+FROM journals
+WHERE idempotency_key = $1;
+
+-- name: InsertJournalLine :exec
+INSERT INTO journal_lines (id, journal_id, ledger_account_id, side, amount_cents)
+VALUES ($1, $2, $3, $4, $5);
+
+-- name: ListJournalLines :many
+SELECT id, journal_id, ledger_account_id, side, amount_cents
+FROM journal_lines
+WHERE journal_id = $1
+ORDER BY id;
+
+-- name: ApplyAccountDelta :execrows
+UPDATE accounts
+SET balance_cents = balance_cents + $2
+WHERE id = $1
+  AND status = 'active'
+  AND balance_cents + $2 >= 0;
+
+-- name: ListActivity :many
+SELECT
+    j.id AS journal_id,
+    j.created_at,
+    j.kind,
+    j.description,
+    jl.side,
+    jl.amount_cents
+FROM journal_lines jl
+JOIN journals j ON j.id = jl.journal_id
+JOIN ledger_accounts la ON la.id = jl.ledger_account_id
+WHERE la.account_id = $1
+ORDER BY j.created_at DESC, jl.id DESC
+LIMIT $2 OFFSET $3;

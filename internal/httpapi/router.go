@@ -12,10 +12,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"bank/internal/account"
 	"bank/internal/auth"
+	"bank/internal/transfer"
 )
 
-func New(h *auth.Handler, webDist string, log *slog.Logger) http.Handler {
+func New(authH *auth.Handler, accountH *account.Handler, transferH *transfer.Handler, webDist string, log *slog.Logger) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -30,14 +32,20 @@ func New(h *auth.Handler, webDist string, log *slog.Logger) http.Handler {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
-			r.Post("/register", h.Register)
-			r.Post("/login", h.Login)
-			r.Post("/refresh", h.Refresh)
-			r.Post("/logout", h.Logout)
+			r.Post("/register", authH.Register)
+			r.Post("/login", authH.Login)
+			r.Post("/refresh", authH.Refresh)
+			r.Post("/logout", authH.Logout)
 		})
 		r.Group(func(r chi.Router) {
-			r.Use(h.Bearer)
-			r.Get("/me", h.Me)
+			r.Use(authH.Bearer)
+			r.Get("/me", authH.Me)
+			r.Post("/accounts", accountH.Open)
+			r.Get("/accounts", accountH.List)
+			r.Get("/accounts/{id}", accountH.Get)
+			r.Post("/accounts/{id}/funding", accountH.Fund)
+			r.Get("/accounts/{id}/activity", accountH.Activity)
+			r.Post("/transfers", transferH.Create)
 		})
 	})
 

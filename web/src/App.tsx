@@ -1,7 +1,11 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./auth";
-import { AppShell, ComingSoonPage, OverviewPage } from "./pages/AppShell";
+import { AppShell } from "./pages/AppShell";
+import { OverviewPage } from "./pages/OverviewPage";
+import { AccountsPage } from "./pages/AccountsPage";
+import { TransfersPage } from "./pages/TransfersPage";
+import { ActivityPage } from "./pages/ActivityPage";
 import { LoginPage, RegisterPage } from "./pages/AuthPages";
 
 function Guard({ children }: { children: ReactNode }) {
@@ -28,33 +32,9 @@ export function App() {
         }
       >
         <Route path="/" element={<OverviewPage />} />
-        <Route
-          path="/accounts"
-          element={
-            <ComingSoonPage
-              title="Accounts"
-              blurb="Demand-deposit accounts and balances open after the ledger ships. This page will not show invented numbers."
-            />
-          }
-        />
-        <Route
-          path="/transfers"
-          element={
-            <ComingSoonPage
-              title="Transfers"
-              blurb="Transfers need an idempotency key and debit/credit lines in one transaction. Not in phase one."
-            />
-          }
-        />
-        <Route
-          path="/activity"
-          element={
-            <ComingSoonPage
-              title="Activity"
-              blurb="Statements will come from journal lines. Sign-in audit is already stored; money movement is not."
-            />
-          }
-        />
+        <Route path="/accounts" element={<AccountsPage />} />
+        <Route path="/transfers" element={<TransfersPage />} />
+        <Route path="/activity" element={<ActivityPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
