@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { closeAccount, errorMessage, freezeAccount, openAccount, unfreezeAccount } from "../api";
+import { copyText, formatAccountNumber, openedLabel } from "../format";
 import { useAccounts, useToast } from "../hooks";
 import { MoneySheet } from "../moneyflow";
 import { AccountHero, Banner, EmptyState, IconArrow, IconFreeze, IconMinus, IconPlus, Page, PageSkeleton, Sheet, Toast } from "../ui";
@@ -126,6 +127,24 @@ export function AccountsPage() {
               </button>
             </div>
           ) : null}
+          {acct.status === "closed" ? <p className="kicker">This account is closed and cannot move money.</p> : null}
+          <section className="panel facts">
+            <button
+              type="button"
+              className="fact"
+              onClick={() => {
+                void copyText(acct.account_number);
+                show("Copied account number");
+              }}
+            >
+              <span>Account number</span>
+              <strong>{formatAccountNumber(acct.account_number)}</strong>
+            </button>
+            <div className="fact">
+              <span>Opened</span>
+              <strong>{openedLabel(acct.opened_at)}</strong>
+            </div>
+          </section>
           {acct.status === "active" ? (
             <div className="manage">
               <button className="btn btn-quiet" type="button" disabled={pending} onClick={() => setClosing(true)}>
@@ -133,7 +152,6 @@ export function AccountsPage() {
               </button>
             </div>
           ) : null}
-          {acct.status === "closed" ? <p className="kicker">This account is closed and cannot move money.</p> : null}
         </>
       )}
 
@@ -144,7 +162,7 @@ export function AccountsPage() {
       {freezing && acct ? (
         <Sheet title="Freeze this account?" onClose={() => setFreezing(false)}>
           <p className="sheet-copy">You won't be able to add, withdraw, or send until you unfreeze it.</p>
-          <div className="manage">
+          <div className="sheet-actions">
             <button className="btn btn-secondary" type="button" onClick={() => setFreezing(false)}>
               Keep it active
             </button>
@@ -163,7 +181,7 @@ export function AccountsPage() {
       {closing && acct ? (
         <Sheet title="Close this account?" onClose={() => setClosing(false)}>
           <p className="sheet-copy">You can only close it when the balance is zero. This cannot be undone.</p>
-          <div className="manage">
+          <div className="sheet-actions">
             <button className="btn btn-secondary" type="button" onClick={() => setClosing(false)}>
               Keep it
             </button>

@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ActivityItem, BankAccount } from "./api";
-import { activityHint, activityTitle, copyText, formatAccountNumber, formatUSD, sanitizeAmount, statusLabel, timeLabel } from "./format";
+import {
+  activityHint,
+  activityTitle,
+  copyText,
+  dateTimeLabel,
+  formatAccountNumber,
+  formatUSD,
+  recentWhen,
+  sanitizeAmount,
+  statusLabel,
+  usdParts,
+} from "./format";
+import { useHideBalance } from "./prefs";
 
 export function IconHome() {
   return (
@@ -102,11 +114,31 @@ export function IconArrow() {
   );
 }
 
+export function IconEye() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M2.8 12S6.2 6.5 12 6.5 21.2 12 21.2 12 17.8 17.5 12 17.5 2.8 12 2.8 12Z" />
+      <circle cx="12" cy="12" r="2.4" />
+    </svg>
+  );
+}
+
+export function IconEyeOff() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 5.2 19.2 20.4M9.4 9.7A3 3 0 0 0 12 15.2M14.7 14.4A3 3 0 0 0 9.8 9.6" />
+      <path d="M6.4 8.2C4.4 9.6 2.8 12 2.8 12S6.2 17.5 12 17.5c1.4 0 2.7-.3 3.8-.8M17.7 15.4c1.8-1.3 3.5-3.4 3.5-3.4S17.8 6.5 12 6.5c-.6 0-1.2.1-1.7.2" />
+    </svg>
+  );
+}
+
 export function StatusPill({ status }: { status: string }) {
   return <span className={`pill pill-${status}`}>{statusLabel(status)}</span>;
 }
 
-export function MoneyText({ cents, signed = false }: { cents: number; signed?: boolean }) {
+export function MoneyText({ cents, signed = false, reveal = false }: { cents: number; signed?: boolean; reveal?: boolean }) {
+  const { hidden } = useHideBalance();
+  if (hidden && !reveal) return <span className="money amt-mask">••••</span>;
   const cls = signed ? (cents > 0 ? "amt-in" : cents < 0 ? "amt-out" : "amt") : "amt";
   const text = signed && cents > 0 ? `+${formatUSD(cents)}` : formatUSD(cents);
   return <span className={`money ${cls}`}>{text}</span>;
@@ -129,6 +161,9 @@ export function Page({ title, kicker, children }: { title?: string; kicker?: str
 export function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   return (
     <div className="empty">
+      <span className="empty-mark" aria-hidden="true">
+        <IconWallet />
+      </span>
       <h2>{title}</h2>
       <p>{body}</p>
       {action}
@@ -142,6 +177,8 @@ export function Banner({ kind = "error", children }: { kind?: "error" | "ok"; ch
 
 export function AccountHero({ account, onCopied }: { account: BankAccount; onCopied?: () => void }) {
   const [copied, setCopied] = useState(false);
+  const { hidden, toggle } = useHideBalance();
+  const parts = usdParts(account.balance_cents);
 
   async function copy() {
     void copyText(account.account_number);
@@ -151,7 +188,7 @@ export function AccountHero({ account, onCopied }: { account: BankAccount; onCop
   }
 
   return (
-    <article className="hero-card">
+    <article className={`hero-card${account.status !== "active" ? ` is-${account.status}` : ""}`}>
       <div className="hero-top">
         <button
           type="button"
@@ -164,8 +201,27 @@ export function AccountHero({ account, onCopied }: { account: BankAccount; onCop
         </button>
         <StatusPill status={account.status} />
       </div>
-      <p className="hero-label">Balance</p>
-      <p className="hero-balance">{formatUSD(account.balance_cents)}</p>
+      <div className="hero-label-row">
+        <p className="hero-label">Balance</p>
+        <button
+          type="button"
+          className="hero-eye"
+          onClick={toggle}
+          aria-label={hidden ? "Show balance" : "Hide balance"}
+        >
+          {hidden ? <IconEyeOff /> : <IconEye />}
+        </button>
+      </div>
+      <p className="hero-balance" aria-hidden={hidden}>
+        {hidden ? (
+          <span className="hero-dots">••••</span>
+        ) : (
+          <>
+            {parts.sign}${parts.dollars}
+            <span className="hero-cents">.{parts.frac}</span>
+          </>
+        )}
+      </p>
     </article>
   );
 }
@@ -179,31 +235,61 @@ export function Sheet({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   useEffect(() => {
+    const root = panelRef.current;
+    const prev = document.activeElement as HTMLElement | null;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusables = () =>
+      root
+        ? [...root.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [href], select, textarea, [tabindex]:not([tabindex="-1"])')]
+        : [];
+    const items = focusables();
+    const autofocus = root?.querySelector<HTMLElement>("input[autofocus], input:not([disabled])");
+    (autofocus ?? items[0])?.focus();
+
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onCloseRef.current();
+      if (e.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevOverflow;
+      prev?.focus();
     };
   }, []);
 
   return (
     <div className="sheet-back" onClick={onClose} role="presentation">
       <div
+        ref={panelRef}
         className="sheet"
         role="dialog"
         aria-modal="true"
         aria-labelledby="sheet-title"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="sheet-grab" aria-hidden="true" />
         <div className="sheet-head">
           <h2 id="sheet-title">{title}</h2>
           <button type="button" className="icon-x" onClick={onClose} aria-label="Close">
@@ -265,19 +351,77 @@ export function PageSkeleton() {
   );
 }
 
-export function TxnRow({ item }: { item: ActivityItem }) {
-  return (
-    <div className="txn">
+export function TxnRow({ item, onOpen }: { item: ActivityItem; onOpen?: (item: ActivityItem) => void }) {
+  const body = (
+    <>
       <span className={`txn-icon ${item.signed_cents >= 0 ? "in" : "out"}`}>
         {item.signed_cents >= 0 ? <IconIn /> : <IconOut />}
       </span>
       <div className="txn-copy">
         <strong>{activityTitle(item.kind, item.signed_cents)}</strong>
         <span>
-          {activityHint(item.kind, item.signed_cents)} · {timeLabel(item.created_at)}
+          {activityHint(item.kind, item.signed_cents)} · {recentWhen(item.created_at)}
         </span>
       </div>
       <MoneyText cents={item.signed_cents} signed />
+    </>
+  );
+  if (onOpen) {
+    return (
+      <button type="button" className="txn txn-btn" onClick={() => onOpen(item)}>
+        {body}
+      </button>
+    );
+  }
+  return <div className="txn">{body}</div>;
+}
+
+export function TxnDetail({ item, onClose }: { item: ActivityItem; onClose: () => void }) {
+  return (
+    <Sheet title={activityTitle(item.kind, item.signed_cents)} onClose={onClose}>
+      <p className="detail-amt">
+        <MoneyText cents={item.signed_cents} signed reveal />
+      </p>
+      <div className="review">
+        <div>
+          <span>When</span>
+          <strong>{dateTimeLabel(item.created_at)}</strong>
+        </div>
+        <div>
+          <span>Type</span>
+          <strong>{activityHint(item.kind, item.signed_cents)}</strong>
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+export function AmountChips({
+  values,
+  onPick,
+  disabled,
+}: {
+  values: number[];
+  onPick: (cents: number) => void;
+  disabled?: boolean;
+}) {
+  if (values.length === 0) return null;
+  return (
+    <div className="chips">
+      {values.map((cents) => (
+        <button key={cents} type="button" className="chip" disabled={disabled} onClick={() => onPick(cents)}>
+          {cents % 100 === 0 ? `$${usdParts(cents).dollars}` : formatUSD(cents)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function BootScreen() {
+  return (
+    <div className="boot">
+      <span className="logo-mark">B</span>
+      <p>Just a moment…</p>
     </div>
   );
 }

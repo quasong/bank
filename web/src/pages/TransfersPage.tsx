@@ -1,9 +1,10 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { createTransfer, errorMessage } from "../api";
 import { digitsOnly, formatAccountNumber, formatUSD, maskAccountInput, statusLabel } from "../format";
 import { centsToDollars, dollarsToCents } from "../money";
 import { useAccounts } from "../hooks";
+import { readRecentDests, rememberDest } from "../prefs";
 import { AmountField, Banner, EmptyState, IconCheck, Page, PageSkeleton } from "../ui";
 
 export function TransfersPage() {
@@ -16,6 +17,10 @@ export function TransfersPage() {
 
   const selected = accounts?.[0];
   const blocked = selected != null && selected.status !== "active";
+  const recents = useMemo(
+    () => readRecentDests().filter((n) => n !== selected?.account_number),
+    [selected?.account_number, sent],
+  );
   const cents = dollarsToCents(amount);
   const ownAccount = selected != null && toNumber === selected.account_number;
   const leftover =
@@ -69,6 +74,7 @@ export function TransfersPage() {
         to: formatAccountNumber(res.transfer.to_account_number),
         left: formatUSD(left),
       });
+      rememberDest(res.transfer.to_account_number);
     } catch (err) {
       setError(errorMessage(err, "Transfer failed"));
       setStep("edit");
@@ -196,6 +202,15 @@ export function TransfersPage() {
             aria-label="Destination account number"
           />
         </label>
+        {recents.length > 0 ? (
+          <div className="chips">
+            {recents.map((n) => (
+              <button key={n} type="button" className="chip" disabled={blocked} onClick={() => setToNumber(n)}>
+                {formatAccountNumber(n)}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <p className={`avail${ownAccount ? " avail-warn" : ""}`}>
           {ownAccount ? "That's your own account" : `${toNumber.length}/8 digits`}
         </p>

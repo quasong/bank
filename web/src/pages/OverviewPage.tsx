@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { errorMessage, openAccount } from "../api";
-import { greeting, statusLabel } from "../format";
+import { errorMessage, openAccount, type ActivityItem } from "../api";
+import { greeting, statusLabel, todayKicker } from "../format";
 import { useAccounts, useActivity, useToast } from "../hooks";
 import { MoneySheet } from "../moneyflow";
 import {
@@ -15,6 +15,7 @@ import {
   Page,
   PageSkeleton,
   Toast,
+  TxnDetail,
   TxnRow,
 } from "../ui";
 
@@ -27,6 +28,7 @@ export function OverviewPage() {
   const { text: toast, show } = useToast();
   const [pending, setPending] = useState(false);
   const [money, setMoney] = useState<MoneyKind | null>(null);
+  const [openTxn, setOpenTxn] = useState<ActivityItem | null>(null);
 
   async function onOpen() {
     setError("");
@@ -57,7 +59,7 @@ export function OverviewPage() {
   const recent = items?.slice(0, 6) ?? [];
 
   return (
-    <Page title={greeting()}>
+    <Page title={greeting()} kicker={todayKicker()}>
       {error ? <Banner>{error}</Banner> : null}
       {!open ? (
         <EmptyState
@@ -124,9 +126,17 @@ export function OverviewPage() {
                 <div className="skel skel-line" />
               </div>
             ) : recent.length === 0 ? (
-              <p className="panel-empty">Nothing here yet. Add money to get started.</p>
+              <p className="panel-empty">
+                Nothing here yet.{" "}
+                <button type="button" className="text-link" disabled={!canMove} onClick={() => setMoney("fund")}>
+                  Add money
+                </button>{" "}
+                to get started.
+              </p>
             ) : (
-              recent.map((item) => <TxnRow key={item.journal_id + item.side} item={item} />)
+              recent.map((item) => (
+                <TxnRow key={item.journal_id + item.side} item={item} onOpen={setOpenTxn} />
+              ))
             )}
           </section>
         </>
@@ -134,6 +144,7 @@ export function OverviewPage() {
       {money && open ? (
         <MoneySheet kind={money} account={open} onClose={() => setMoney(null)} onSuccess={onMoneySuccess} />
       ) : null}
+      {openTxn ? <TxnDetail item={openTxn} onClose={() => setOpenTxn(null)} /> : null}
       <Toast text={toast} />
     </Page>
   );

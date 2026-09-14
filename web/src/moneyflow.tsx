@@ -2,7 +2,9 @@ import { FormEvent, useState } from "react";
 import { errorMessage, fundAccount, withdrawAccount, type BankAccount } from "./api";
 import { formatUSD } from "./format";
 import { centsToDollars, dollarsToCents } from "./money";
-import { AmountField, Banner, Sheet } from "./ui";
+import { AmountChips, AmountField, Banner, Sheet } from "./ui";
+
+const ADD_PRESETS = [1000, 2000, 5000, 10000];
 
 export function MoneySheet({
   kind,
@@ -23,6 +25,7 @@ export function MoneySheet({
   const tooMuch = withdraw && cents != null && cents > account.balance_cents;
   const ready = cents != null && cents > 0 && !tooMuch;
   const label = withdraw ? "Withdraw" : "Add";
+  const chips = withdraw ? ADD_PRESETS.filter((v) => v <= account.balance_cents) : ADD_PRESETS;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -56,6 +59,7 @@ export function MoneySheet({
       <form className="stack" onSubmit={onSubmit}>
         {error ? <Banner>{error}</Banner> : null}
         <AmountField value={amount} onChange={setAmount} autoFocus />
+        <AmountChips values={chips} onPick={(v) => setAmount(centsToDollars(v))} disabled={pending} />
         <p className="avail">
           Available {formatUSD(account.balance_cents)}
           {withdraw && account.balance_cents > 0 ? (

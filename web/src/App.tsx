@@ -7,18 +7,19 @@ import { AccountsPage } from "./pages/AccountsPage";
 import { TransfersPage } from "./pages/TransfersPage";
 import { ActivityPage } from "./pages/ActivityPage";
 import { LoginPage, RegisterPage } from "./pages/AuthPages";
+import { BootScreen } from "./ui";
 
 function Guard({ children }: { children: ReactNode }) {
   const { ready, customer } = useAuth();
   const location = useLocation();
-  if (!ready) return <div className="boot">Just a moment…</div>;
+  if (!ready) return <BootScreen />;
   if (!customer) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return children;
 }
 
 export function App() {
   const { ready } = useAuth();
-  if (!ready) return <div className="boot">Just a moment…</div>;
+  if (!ready) return <BootScreen />;
 
   return (
     <Routes>

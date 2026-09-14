@@ -1,9 +1,16 @@
-export function formatUSD(cents: number): string {
+export function usdParts(cents: number): { sign: string; dollars: string; frac: string } {
   const neg = cents < 0;
   const abs = Math.abs(cents);
-  const dollars = Math.floor(abs / 100);
-  const frac = String(abs % 100).padStart(2, "0");
-  return `${neg ? "-" : ""}$${dollars.toLocaleString("en-US")}.${frac}`;
+  return {
+    sign: neg ? "-" : "",
+    dollars: Math.floor(abs / 100).toLocaleString("en-US"),
+    frac: String(abs % 100).padStart(2, "0"),
+  };
+}
+
+export function formatUSD(cents: number): string {
+  const { sign, dollars, frac } = usdParts(cents);
+  return `${sign}$${dollars}.${frac}`;
 }
 
 export function formatAccountNumber(n: string): string {
@@ -48,7 +55,8 @@ export function activityHint(kind: string, signedCents = 0): string {
 }
 
 export function sanitizeAmount(raw: string): string {
-  let v = raw.replace(/[^\d.]/g, "");
+  let v = raw.includes(",") && !raw.includes(".") ? raw.replace(",", ".") : raw;
+  v = v.replace(/[^\d.]/g, "");
   const dot = v.indexOf(".");
   if (dot !== -1) {
     v = `${v.slice(0, dot + 1)}${v.slice(dot + 1).replace(/\./g, "").slice(0, 2)}`;
@@ -90,6 +98,26 @@ export function dayLabel(iso: string, now = new Date()): string {
 
 export function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+export function dateTimeLabel(iso: string): string {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · ${timeLabel(iso)}`;
+}
+
+export function recentWhen(iso: string, now = new Date()): string {
+  const sec = Math.max(0, Math.round((now.getTime() - new Date(iso).getTime()) / 1000));
+  if (sec < 45) return "Just now";
+  if (sec < 3600) return `${Math.max(1, Math.round(sec / 60))} min ago`;
+  return timeLabel(iso);
+}
+
+export function todayKicker(now = new Date()): string {
+  return now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" });
+}
+
+export function openedLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export function statusLabel(status: string): string {
