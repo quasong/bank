@@ -7,11 +7,11 @@ export function centsToDollars(cents: number): string {
 }
 
 export function dollarsToCents(input: string): number | null {
-  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(input.trim());
+  const m = /^(\d+)(?:\.(\d{0,2}))?$/.exec(input.trim());
   if (!m) return null;
   const dollars = Number(m[1]);
-  const centsPart = (m[2] ?? "00").padEnd(2, "0");
-  const cents = Number(centsPart);
+  const centsPart = (m[2] ?? "").padEnd(2, "0");
+  const cents = Number(centsPart || "00");
   if (!Number.isInteger(dollars) || !Number.isInteger(cents)) return null;
   return dollars * 100 + cents;
 }

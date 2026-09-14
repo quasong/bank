@@ -30,11 +30,52 @@ export function activityTitle(kind: string, signedCents: number): string {
   return kind;
 }
 
-export function activityHint(kind: string): string {
-  if (kind === "funding") return "Added from vault";
-  if (kind === "withdrawal") return "Sent to vault";
-  if (kind === "transfer") return "Between accounts";
-  return "Ledger entry";
+export function digitsOnly(value: string, max = 8): string {
+  return value.replace(/\D/g, "").slice(0, max);
+}
+
+export function maskAccountInput(digits: string): string {
+  const d = digitsOnly(digits);
+  if (d.length <= 4) return d;
+  return `${d.slice(0, 4)} · ${d.slice(4)}`;
+}
+
+export function activityHint(kind: string, signedCents = 0): string {
+  if (kind === "funding") return "Added instantly";
+  if (kind === "withdrawal") return "Cashed out";
+  if (kind === "transfer") return signedCents >= 0 ? "From another account" : "To another account";
+  return "Payment";
+}
+
+export function sanitizeAmount(raw: string): string {
+  let v = raw.replace(/[^\d.]/g, "");
+  const dot = v.indexOf(".");
+  if (dot !== -1) {
+    v = `${v.slice(0, dot + 1)}${v.slice(dot + 1).replace(/\./g, "").slice(0, 2)}`;
+  }
+  const [dollarsRaw = "", frac] = v.split(".");
+  const dollars = dollarsRaw === "" && frac != null ? "0" : dollarsRaw.replace(/^0+(\d)/, "$1").slice(0, 9);
+  if (frac == null && !v.includes(".")) return dollars;
+  return `${dollars}.${frac ?? ""}`;
+}
+
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.setAttribute("readonly", "");
+    el.style.position = "fixed";
+    el.style.top = "0";
+    el.style.left = "-9999px";
+    document.body.appendChild(el);
+    el.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(el);
+    return ok;
+  }
 }
 
 export function dayLabel(iso: string, now = new Date()): string {

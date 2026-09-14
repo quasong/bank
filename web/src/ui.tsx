@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
-import type { BankAccount } from "./api";
-import { formatAccountNumber, formatUSD, statusLabel } from "./format";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ActivityItem, BankAccount } from "./api";
+import { activityHint, activityTitle, copyText, formatAccountNumber, formatUSD, sanitizeAmount, statusLabel, timeLabel } from "./format";
 
 export function IconHome() {
   return (
@@ -140,11 +140,28 @@ export function Banner({ kind = "error", children }: { kind?: "error" | "ok"; ch
   return <p className={kind === "ok" ? "banner banner-ok" : "banner banner-error"}>{children}</p>;
 }
 
-export function AccountHero({ account }: { account: BankAccount }) {
+export function AccountHero({ account, onCopied }: { account: BankAccount; onCopied?: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    void copyText(account.account_number);
+    setCopied(true);
+    onCopied?.();
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+
   return (
     <article className="hero-card">
       <div className="hero-top">
-        <span>USD · {formatAccountNumber(account.account_number)}</span>
+        <button
+          type="button"
+          className={`hero-copy${copied ? " copied" : ""}`}
+          onClick={copy}
+          aria-label={`Copy account number ${formatAccountNumber(account.account_number)}`}
+        >
+          USD · {formatAccountNumber(account.account_number)}
+          <em>{copied ? "Copied" : "Copy"}</em>
+        </button>
         <StatusPill status={account.status} />
       </div>
       <p className="hero-label">Balance</p>
@@ -162,6 +179,22 @@ export function Sheet({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onCloseRef.current();
+    }
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   return (
     <div className="sheet-back" onClick={onClose} role="presentation">
       <div
@@ -187,10 +220,12 @@ export function AmountField({
   value,
   onChange,
   disabled,
+  autoFocus,
 }: {
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
+  autoFocus?: boolean;
 }) {
   return (
     <label className="amount-field">
@@ -199,13 +234,50 @@ export function AmountField({
         <span className="amount-ccy">$</span>
         <input
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(sanitizeAmount(e.target.value))}
+          onFocus={(e) => e.currentTarget.select()}
           inputMode="decimal"
           placeholder="0.00"
           disabled={disabled}
-          required
+          autoFocus={autoFocus}
         />
       </div>
     </label>
+  );
+}
+
+export function Toast({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <div className="toast" role="status" aria-live="polite">
+      {text}
+    </div>
+  );
+}
+
+export function PageSkeleton() {
+  return (
+    <div className="page">
+      <div className="skel skel-title" />
+      <div className="skel skel-hero" />
+      <div className="skel skel-row" />
+    </div>
+  );
+}
+
+export function TxnRow({ item }: { item: ActivityItem }) {
+  return (
+    <div className="txn">
+      <span className={`txn-icon ${item.signed_cents >= 0 ? "in" : "out"}`}>
+        {item.signed_cents >= 0 ? <IconIn /> : <IconOut />}
+      </span>
+      <div className="txn-copy">
+        <strong>{activityTitle(item.kind, item.signed_cents)}</strong>
+        <span>
+          {activityHint(item.kind, item.signed_cents)} · {timeLabel(item.created_at)}
+        </span>
+      </div>
+      <MoneyText cents={item.signed_cents} signed />
+    </div>
   );
 }

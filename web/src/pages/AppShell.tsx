@@ -46,6 +46,12 @@ export function AppShell() {
         </div>
       </aside>
       <div className="main">
+        <header className="mobile-head">
+          <span className="who">{customer?.email}</span>
+          <button type="button" className="btn btn-quiet" onClick={onLogout}>
+            Sign out
+          </button>
+        </header>
         <section className="content">
           <Outlet />
         </section>

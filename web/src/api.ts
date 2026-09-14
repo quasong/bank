@@ -23,6 +23,25 @@ export class ApiError extends Error {
   }
 }
 
+const FRIENDLY: Record<string, string> = {
+  account_frozen: "This account is frozen",
+  account_closed: "This account is closed",
+  account_has_balance: "Withdraw the remaining balance before closing",
+  insufficient_funds: "You don't have that much available",
+  email_taken: "That email is already registered",
+  invalid_credentials: "Incorrect email or password",
+  rate_limited: "Too many attempts. Try again in a moment",
+  account_locked: "This profile is locked",
+  account_exists: "You already have a USD account",
+};
+
+export function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    return FRIENDLY[err.code] ?? err.message.replace(/^\w/, (c) => c.toUpperCase());
+  }
+  return fallback;
+}
+
 let accessToken: string | null = null;
 
 export function setAccessToken(token: string | null) {

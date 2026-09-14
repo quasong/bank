@@ -1,52 +1,84 @@
 import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
-import { ApiError, createTransfer } from "../api";
-import { formatAccountNumber, formatUSD } from "../format";
-import { dollarsToCents } from "../money";
+import { createTransfer, errorMessage } from "../api";
+import { digitsOnly, formatAccountNumber, formatUSD, maskAccountInput, statusLabel } from "../format";
+import { centsToDollars, dollarsToCents } from "../money";
 import { useAccounts } from "../hooks";
-import { AmountField, Banner, EmptyState, IconCheck, Page } from "../ui";
+import { AmountField, Banner, EmptyState, IconCheck, Page, PageSkeleton } from "../ui";
 
 export function TransfersPage() {
   const { accounts, error, setError, reload } = useAccounts();
   const [toNumber, setToNumber] = useState("");
-  const [amount, setAmount] = useState("10.00");
+  const [amount, setAmount] = useState("");
+  const [step, setStep] = useState<"edit" | "confirm">("edit");
   const [pending, setPending] = useState(false);
-  const [sent, setSent] = useState<{ amount: string; to: string } | null>(null);
+  const [sent, setSent] = useState<{ amount: string; to: string; left: string } | null>(null);
 
   const selected = accounts?.[0];
   const blocked = selected != null && selected.status !== "active";
+  const cents = dollarsToCents(amount);
+  const ownAccount = selected != null && toNumber === selected.account_number;
+  const leftover =
+    selected && cents != null && cents > 0 && cents <= selected.balance_cents ? selected.balance_cents - cents : null;
+  const ready =
+    !blocked &&
+    cents != null &&
+    cents > 0 &&
+    toNumber.length === 8 &&
+    selected != null &&
+    !ownAccount &&
+    cents <= selected.balance_cents;
 
-  async function onSubmit(e: FormEvent) {
+  function validate(): string | null {
+    if (cents == null || cents <= 0) return "Enter an amount with at most two decimals";
+    if (toNumber.length !== 8) return "Destination is an 8-digit account number";
+    if (ownAccount) return "That's your own account";
+    if (selected && cents > selected.balance_cents) return "You don't have that much available";
+    if (blocked) return "This account cannot send money right now.";
+    return null;
+  }
+
+  function onContinue(e: FormEvent) {
     e.preventDefault();
-    if (!selected) return;
-    const cents = dollarsToCents(amount);
-    if (cents == null || cents <= 0) {
-      setError("Enter an amount with at most two decimals");
+    const issue = validate();
+    if (issue) {
+      setError(issue);
       return;
     }
-    if (toNumber.length !== 8) {
-      setError("Destination is an 8-digit account number");
-      return;
-    }
-    if (blocked) {
-      setError("This account cannot send money right now.");
+    setError("");
+    setStep("confirm");
+  }
+
+  async function onConfirm(e?: FormEvent) {
+    e?.preventDefault();
+    if (!selected || !cents) return;
+    const issue = validate();
+    if (issue) {
+      setError(issue);
+      setStep("edit");
       return;
     }
     setError("");
     setPending(true);
     try {
       const res = await createTransfer(selected.id, toNumber, cents, crypto.randomUUID());
-      await reload();
-      setSent({ amount: formatUSD(cents), to: formatAccountNumber(res.transfer.to_account_number) });
+      const next = await reload();
+      const left = next[0]?.balance_cents ?? selected.balance_cents - cents;
+      setSent({
+        amount: formatUSD(cents),
+        to: formatAccountNumber(res.transfer.to_account_number),
+        left: formatUSD(left),
+      });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Transfer failed");
+      setError(errorMessage(err, "Transfer failed"));
+      setStep("edit");
     } finally {
       setPending(false);
     }
   }
 
   if (!accounts) {
-    return <p className="kicker">Loading…</p>;
+    return <PageSkeleton />;
   }
 
   if (accounts.length === 0) {
@@ -73,18 +105,57 @@ export function TransfersPage() {
             <IconCheck />
           </div>
           <h2>You sent {sent.amount}</h2>
-          <p>To {sent.to}</p>
+          <p>
+            To {sent.to}
+            <br />
+            {sent.left} left in your account
+          </p>
           <button
             className="btn btn-primary btn-block"
             type="button"
             onClick={() => {
               setSent(null);
               setToNumber("");
+              setAmount("");
+              setStep("edit");
             }}
           >
             Send again
           </button>
+          <Link className="btn btn-secondary btn-block" to="/">
+            Back home
+          </Link>
         </div>
+      </Page>
+    );
+  }
+
+  if (step === "confirm" && selected && cents) {
+    return (
+      <Page title="Send" kicker="Check it">
+        {error ? <Banner>{error}</Banner> : null}
+        <form className="send-card" onSubmit={onConfirm}>
+          <div className="review">
+            <div>
+              <span>You send</span>
+              <strong>{formatUSD(cents)}</strong>
+            </div>
+            <div>
+              <span>To</span>
+              <strong>{formatAccountNumber(toNumber)}</strong>
+            </div>
+            <div>
+              <span>Remaining</span>
+              <strong>{formatUSD(selected.balance_cents - cents)}</strong>
+            </div>
+          </div>
+          <button className="btn btn-primary btn-block" type="submit" disabled={pending}>
+            {pending ? "Sending…" : `Send ${formatUSD(cents)}`}
+          </button>
+          <button className="btn btn-secondary btn-block" type="button" disabled={pending} onClick={() => setStep("edit")}>
+            Back
+          </button>
+        </form>
       </Page>
     );
   }
@@ -94,29 +165,42 @@ export function TransfersPage() {
       {error ? <Banner>{error}</Banner> : null}
       {blocked ? (
         <Banner>
-          This account is {selected?.status}. Unfreeze it in Account to send.
+          This account is {statusLabel(selected?.status ?? "")}. <Link to="/accounts">Unfreeze it</Link> to send.
         </Banner>
       ) : null}
-      <form className="send-card" onSubmit={onSubmit}>
-        <AmountField value={amount} onChange={setAmount} disabled={blocked} />
-        <p className="avail">Available {formatUSD(selected?.balance_cents ?? 0)}</p>
+      <form className="send-card" onSubmit={onContinue}>
+        <AmountField value={amount} onChange={setAmount} disabled={blocked} autoFocus />
+        <p className="avail">
+          Available {formatUSD(selected?.balance_cents ?? 0)}
+          {selected && selected.balance_cents > 0 && !blocked ? (
+            <>
+              {" · "}
+              <button type="button" className="text-link" onClick={() => setAmount(centsToDollars(selected.balance_cents))}>
+                Max
+              </button>
+            </>
+          ) : null}
+          {leftover != null ? ` · ${formatUSD(leftover)} after this send` : null}
+        </p>
         <label>
           To
           <input
-            className="digits"
-            value={toNumber}
-            onChange={(e) => setToNumber(e.target.value.replace(/\D/g, "").slice(0, 8))}
-            required
+            className={`digits${ownAccount ? " input-warn" : toNumber.length === 8 ? " input-ok" : ""}`}
+            value={maskAccountInput(toNumber)}
+            onChange={(e) => setToNumber(digitsOnly(e.target.value))}
             disabled={blocked}
             inputMode="numeric"
-            pattern="[0-9]{8}"
-            maxLength={8}
-            placeholder="00000000"
+            maxLength={11}
+            placeholder="0000 · 0000"
             autoComplete="off"
+            aria-label="Destination account number"
           />
         </label>
-        <button className="btn btn-primary btn-block" type="submit" disabled={pending || blocked}>
-          {pending ? "Sending…" : "Send"}
+        <p className={`avail${ownAccount ? " avail-warn" : ""}`}>
+          {ownAccount ? "That's your own account" : `${toNumber.length}/8 digits`}
+        </p>
+        <button className="btn btn-primary btn-block" type="submit" disabled={!ready}>
+          {cents != null && cents > 0 ? `Continue · ${formatUSD(cents)}` : "Continue"}
         </button>
       </form>
     </Page>

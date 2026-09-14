@@ -194,6 +194,10 @@ a.btn {
   text-decoration: none;
 }
 
+.btn-block {
+  width: 100%;
+}
+
 /* App shell */
 
 .shell {
@@ -448,6 +452,14 @@ a.btn {
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.quick:hover:not(:disabled) .quick-icon {
+  background: var(--bg);
+}
+
+.quick:active:not(:disabled) .quick-icon {
+  transform: scale(0.96);
 }
 
 .quick:disabled {
@@ -742,6 +754,217 @@ a.btn {
   letter-spacing: 0.08em;
 }
 
+.hero-copy {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 4px 0;
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-copy em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  min-width: 4.6em;
+}
+
+.hero-copy.copied em {
+  color: #6ce9a6;
+}
+
+.text-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.banner a,
+.banner .text-link {
+  color: inherit;
+  font-weight: 700;
+}
+
+.panel-empty {
+  margin: 0;
+  padding: 18px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.sheet-copy {
+  margin: 0 0 16px;
+  color: var(--muted);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 50;
+  box-shadow: var(--shadow);
+  white-space: nowrap;
+  animation: toast-in 0.22s ease;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.review {
+  display: grid;
+  gap: 14px;
+  padding: 4px 0 8px;
+}
+
+.review div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: baseline;
+}
+
+.review span {
+  color: var(--muted);
+  font-size: 14px;
+  min-width: 0;
+}
+
+.review strong {
+  font-size: 16px;
+  letter-spacing: -0.03em;
+  flex-shrink: 0;
+}
+
+.skel {
+  background: linear-gradient(90deg, var(--bg-2), #f8f8fa, var(--bg-2));
+  background-size: 200% 100%;
+  animation: shine 1.2s ease-in-out infinite;
+  border-radius: 12px;
+}
+
+.skel-title {
+  height: 36px;
+  width: 46%;
+  margin-bottom: 22px;
+}
+
+.skel-hero {
+  height: 168px;
+  border-radius: var(--radius);
+  margin-bottom: 18px;
+}
+
+.skel-row {
+  height: 72px;
+}
+
+@keyframes shine {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.pw {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.pw input {
+  border: 0;
+  box-shadow: none;
+}
+
+.pw input:focus {
+  box-shadow: none;
+}
+
+.pw .text-link {
+  padding: 0 12px;
+  color: var(--muted);
+}
+
+.pw:focus-within {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(12, 13, 18, 0.08);
+}
+
+.input-warn {
+  border-color: var(--loss);
+}
+
+.input-ok {
+  border-color: var(--gain);
+}
+
+.avail-warn {
+  color: var(--loss);
+}
+
+.skel-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.skel-line {
+  height: 16px;
+  width: 48%;
+}
+
+.skel-txn {
+  border-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skel,
+  .toast {
+    animation: none;
+  }
+}
+
+.mobile-head {
+  display: none;
+}
+
+.amount-row {
+  align-items: center;
+}
+
 @media (min-width: 861px) {
   .sheet-back {
     place-items: center;
@@ -798,5 +1021,29 @@ a.btn {
     font-size: 11px;
     padding: 6px 4px;
     border-radius: 10px;
+  }
+
+  .mobile-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px 0;
+  }
+
+  .mobile-head .who {
+    font-size: 12px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 70%;
+  }
+
+  .toast {
+    bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  .sheet {
+    padding-bottom: calc(22px + env(safe-area-inset-bottom));
   }
 }

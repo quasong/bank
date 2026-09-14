@@ -1,28 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { listActivity, type ActivityItem } from "../api";
-import { activityHint, activityTitle, dayLabel, timeLabel } from "../format";
-import { useAccounts } from "../hooks";
-import { Banner, EmptyState, IconIn, IconOut, MoneyText, Page } from "../ui";
+import type { ActivityItem } from "../api";
+import { dayLabel } from "../format";
+import { useAccounts, useActivity } from "../hooks";
+import { Banner, EmptyState, Page, PageSkeleton, TxnRow } from "../ui";
 
 export function ActivityPage() {
-  const { accounts, error, setError } = useAccounts();
-  const [items, setItems] = useState<ActivityItem[]>([]);
+  const { accounts, error } = useAccounts();
   const account = accounts?.[0];
-
-  useEffect(() => {
-    if (!account) {
-      setItems([]);
-      return;
-    }
-    listActivity(account.id)
-      .then((data) => setItems(data.items))
-      .catch((err) => setError(err instanceof Error ? err.message : "Could not load activity"));
-  }, [account, setError]);
+  const { items } = useActivity(account?.id);
 
   const groups = useMemo(() => {
     const map = new Map<string, ActivityItem[]>();
-    for (const item of items) {
+    for (const item of items ?? []) {
       const key = dayLabel(item.created_at);
       const list = map.get(key) ?? [];
       list.push(item);
@@ -31,8 +21,8 @@ export function ActivityPage() {
     return [...map.entries()];
   }, [items]);
 
-  if (!accounts) {
-    return <p className="kicker">Loading…</p>;
+  if (!accounts || items == null) {
+    return <PageSkeleton />;
   }
 
   if (!account) {
@@ -62,18 +52,7 @@ export function ActivityPage() {
             <div className="day-group" key={day}>
               <p className="day-label">{day}</p>
               {rows.map((item) => (
-                <div className="txn" key={item.journal_id + item.side}>
-                  <span className={`txn-icon ${item.signed_cents >= 0 ? "in" : "out"}`}>
-                    {item.signed_cents >= 0 ? <IconIn /> : <IconOut />}
-                  </span>
-                  <div className="txn-copy">
-                    <strong>{activityTitle(item.kind, item.signed_cents)}</strong>
-                    <span>
-                      {activityHint(item.kind)} · {timeLabel(item.created_at)}
-                    </span>
-                  </div>
-                  <MoneyText cents={item.signed_cents} signed />
-                </div>
+                <TxnRow key={item.journal_id + item.side} item={item} />
               ))}
             </div>
           ))}

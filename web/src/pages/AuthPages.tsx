@@ -1,6 +1,6 @@
 import { FormEvent, type ReactNode, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { ApiError } from "../api";
+import { errorMessage } from "../api";
 import { useAuth } from "../auth";
 import { BANK_NAME } from "../brand";
 
@@ -37,6 +37,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (customer) return <Navigate to={from} replace />;
 
@@ -48,7 +49,7 @@ export function LoginPage() {
       await login(email, password);
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Sign in failed");
+      setError(errorMessage(err, "Sign in failed"));
     } finally {
       setPending(false);
     }
@@ -62,6 +63,7 @@ export function LoginPage() {
           <input
             type="email"
             autoComplete="username"
+            autoFocus
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -69,14 +71,19 @@ export function LoginPage() {
         </label>
         <label>
           Password
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-          />
+          <span className="pw">
+            <input
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+            />
+            <button type="button" className="text-link" onClick={() => setShowPassword((v) => !v)}>
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </span>
         </label>
         {error ? <p className="banner banner-error">{error}</p> : null}
         <button className="btn btn-primary btn-block" type="submit" disabled={pending}>
@@ -97,6 +104,7 @@ export function RegisterPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (customer) return <Navigate to="/" replace />;
 
@@ -108,7 +116,7 @@ export function RegisterPage() {
       await register(email, password);
       navigate("/", { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Registration failed");
+      setError(errorMessage(err, "Registration failed"));
     } finally {
       setPending(false);
     }
@@ -122,6 +130,7 @@ export function RegisterPage() {
           <input
             type="email"
             autoComplete="username"
+            autoFocus
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -129,14 +138,22 @@ export function RegisterPage() {
         </label>
         <label>
           Password
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-          />
+          <span className="pw">
+            <input
+              type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+            />
+            <button type="button" className="text-link" onClick={() => setShowPassword((v) => !v)}>
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </span>
+          {password.length > 0 && password.length < 8 ? (
+            <span className="avail">{8 - password.length} more characters</span>
+          ) : null}
         </label>
         {error ? <p className="banner banner-error">{error}</p> : null}
         <button className="btn btn-primary btn-block" type="submit" disabled={pending}>
