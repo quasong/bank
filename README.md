@@ -6,7 +6,7 @@ Phase one shipped authentication. This codebase also has the **deposit money pat
 
 ## Architecture
 
-Modular monolith on PostgreSQL. A customer identity is not an account. Signing in does not open an account. The first deposit is USD; you can then open EUR and GBP balances. Each currency has its own local details (ACH routing, UK sort code, or GB IBAN). Same-currency sends stay on the ledger; cross-currency conversion uses a live ECB rate from Frankfurter and posts a balanced FX journal per currency.
+Modular monolith on PostgreSQL. A customer identity is not an account. Signing in does not open an account. The first deposit is USD; you can then open EUR, GBP, and other ECB-quoted balances. Each currency has its own local details (ACH routing, UK sort code, GB IBAN, or a `CCY` plus 8-digit local account). Same-currency sends stay on the ledger; cross-currency conversion uses a live ECB rate from Frankfurter and posts a balanced FX journal per currency.
 
 SQL lives in `internal/db/queries` and `migrations`. Runtime execution is pgx in `internal/db/store.go` and `internal/db/money.go`.
 
@@ -18,7 +18,7 @@ internal/auth       register / login / refresh / logout
 internal/customer   customer profile
 internal/audit      audit action names
 internal/account    demand-deposit accounts and funding
-internal/currency   USD / EUR / GBP codes, local details, integer FX math
+internal/currency   USD / EUR / GBP plus other ECB-quoted codes, local details, integer FX math
 internal/ledger     journal validation and types
 internal/transfer   same-currency customer-to-customer transfers
 internal/fx         live quotes and conversion
@@ -74,13 +74,13 @@ See [.env.example](.env.example). `JWT_SECRET` must be at least 32 bytes. Local 
 
 Deposits are ledger liabilities. Demo funding debits vault cash in that currency and credits the customer account. A transfer debits the sender and credits the destination in one transaction, and only works in the same currency. Amounts are integer minor units (`int64`), never `float64`.
 
-USD is an ACH destination: routing `121000248` (fictional ABA with a valid checksum) plus an 8-digit DDA, stored as `121000248########`. GBP is sort code `04-00-04` plus its own 8-digit account. EUR is a GB IBAN `GB##THEB040004########` (ISO 13616 checksum) with BIC `THEBGB2L`. Each wallet mints a distinct 8-digit local account. These identifiers mimic real formats; they are not issued by a real bank.
+USD is an ACH destination: routing `121000248` (fictional ABA with a valid checksum) plus an 8-digit DDA, stored as `121000248########`. GBP is sort code `04-00-04` plus its own 8-digit account. EUR is a GB IBAN `GB##THEB040004########` (ISO 13616 checksum) with BIC `THEBGB2L`. Other wallets (AUD, CAD, SGD, and the rest of the 2-decimal ECB set) store `CCY########`. Each wallet mints a distinct 8-digit local account. These identifiers mimic real formats; they are not issued by a real bank.
 
 Cross-currency conversion withdraws from the source vault and funds the destination vault in one journal, balanced per currency. Live rates come from [Frankfurter](https://api.frankfurter.dev/v1) (ECB), cached for about a minute, and converted with `rate_e8` integer math (half-up). The destination pocket is opened automatically if needed.
 
 | Method | Path | Notes |
 |------|------|------|
-| POST | `/api/v1/accounts` | Open a balance. Body `{currency?}` (`USD` default, or `EUR` / `GBP`) |
+| POST | `/api/v1/accounts` | Open a balance. Body `{currency?}` (`USD` default, or any supported code) |
 | GET | `/api/v1/accounts` | List mine |
 | GET | `/api/v1/accounts/{id}` | Detail, local details, and cached balance |
 | POST | `/api/v1/accounts/{id}/funding` | Demo inbound credit (`amount_cents`, `idempotency_key`) |

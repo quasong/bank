@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"bank/internal/account"
 	"bank/internal/currency"
 )
 
@@ -51,7 +50,7 @@ func (c *Client) Snapshot(ctx context.Context) (*Table, error) {
 	}
 	c.mu.Unlock()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/latest?from=USD&to=EUR,GBP", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/latest?from=USD", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -79,14 +78,14 @@ func (c *Client) Snapshot(ctx context.Context) (*Table, error) {
 		return nil, err
 	}
 	per := map[currency.Code]int64{currency.USD: currency.ScaleE8}
-	for _, code := range []currency.Code{currency.EUR, currency.GBP} {
-		raw, ok := payload.Rates[string(code)]
-		if !ok {
-			return nil, account.ErrRates
+	for rawCode, raw := range payload.Rates {
+		code, ok := currency.Parse(rawCode)
+		if !ok || code == currency.USD {
+			continue
 		}
 		n, err := currency.RateE8(raw.String())
 		if err != nil {
-			return nil, err
+			continue
 		}
 		per[code] = n
 	}

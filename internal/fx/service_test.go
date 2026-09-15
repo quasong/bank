@@ -18,7 +18,7 @@ func testRates(t *testing.T) (*httptest.Server, *Client) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"amount":1.0,"base":"USD","date":"2026-09-14","rates":{"EUR":0.85,"GBP":0.75}}`))
+		_, _ = w.Write([]byte(`{"amount":1.0,"base":"USD","date":"2026-09-14","rates":{"EUR":0.85,"GBP":0.75,"AUD":1.5}}`))
 	}))
 	t.Cleanup(srv.Close)
 	return srv, NewClient(srv.URL, srv.Client())
@@ -32,6 +32,18 @@ func TestQuoteUSDToEUR(t *testing.T) {
 		t.Fatal(err)
 	}
 	if q.QuoteCents != 8500 || q.Rate != "0.85" || q.AsOf != "2026-09-14" {
+		t.Fatalf("%+v", q)
+	}
+}
+
+func TestQuoteUSDToAUD(t *testing.T) {
+	_, client := testRates(t)
+	svc := NewService(account.NewService(account.NewMemStore()), account.NewMemStore(), client)
+	q, err := svc.Quote(context.Background(), currency.USD, currency.AUD, 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.QuoteCents != 15000 || q.Rate != "1.5" {
 		t.Fatalf("%+v", q)
 	}
 }

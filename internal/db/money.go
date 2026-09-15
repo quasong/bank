@@ -91,8 +91,7 @@ func (s *Store) ListByCustomer(ctx context.Context, customerID uuid.UUID) ([]acc
 		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
 		FROM accounts a
 		JOIN ledger_accounts la ON la.account_id = a.id
-		WHERE a.customer_id = $1
-		ORDER BY CASE a.currency WHEN 'USD' THEN 0 WHEN 'EUR' THEN 1 ELSE 2 END, a.opened_at`, customerID)
+		WHERE a.customer_id = $1`, customerID)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +107,7 @@ func (s *Store) ListByCustomer(ctx context.Context, customerID uuid.UUID) ([]acc
 	if out == nil {
 		out = []account.Account{}
 	}
+	sortAccounts(out)
 	return out, rows.Err()
 }
 
@@ -116,7 +116,7 @@ func (s *Store) ListAll(ctx context.Context) ([]account.Account, error) {
 		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
 		FROM accounts a
 		JOIN ledger_accounts la ON la.account_id = a.id
-		ORDER BY a.opened_at, CASE a.currency WHEN 'USD' THEN 0 WHEN 'EUR' THEN 1 ELSE 2 END`)
+		ORDER BY a.opened_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -374,4 +374,14 @@ func scanAccountRow(row accountRow) (account.Account, error) {
 	}
 	a.Currency = currency.Code(ccy)
 	return a, nil
+}
+
+func sortAccounts(out []account.Account) {
+	sort.Slice(out, func(i, j int) bool {
+		ri, rj := out[i].Currency.Rank(), out[j].Currency.Rank()
+		if ri != rj {
+			return ri < rj
+		}
+		return out[i].OpenedAt.Before(out[j].OpenedAt)
+	})
 }

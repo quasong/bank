@@ -47,6 +47,36 @@ func TestNormalizeGBPAndUSD(t *testing.T) {
 	}
 }
 
+func TestIssuePrefixedRoundTrip(t *testing.T) {
+	core := "12345678"
+	aud, err := Issue(AUD, core)
+	if err != nil || aud != "AUD12345678" {
+		t.Fatalf("aud %q %v", aud, err)
+	}
+	got, code, ok := Normalize("AUD · 1234 5678")
+	if !ok || code != AUD || got != aud || Core(aud) != core {
+		t.Fatalf("aud normalize %q %s %v core=%s", got, code, ok, Core(aud))
+	}
+	if Format(aud) != "AUD · 1234 5678" {
+		t.Fatalf("format %q", Format(aud))
+	}
+	if _, _, ok := Normalize("USD12345678"); ok {
+		t.Fatal("usd prefix form is not a local account")
+	}
+}
+
+func TestVaultIDsStable(t *testing.T) {
+	if Vault(USD) != VaultUSD || Vault(EUR) != VaultEUR || Vault(GBP) != VaultGBP {
+		t.Fatal("seed vaults")
+	}
+	if Vault(AUD).String() != "237b5673-edd9-5c45-8ba1-75983e0bc1fa" {
+		t.Fatalf("aud vault %s", Vault(AUD))
+	}
+	if Vault(ZAR).String() != "bfa2d0b9-2e0f-533c-b2be-7f8802368467" {
+		t.Fatalf("zar vault %s", Vault(ZAR))
+	}
+}
+
 func TestCrossRateE8(t *testing.T) {
 	usd := ScaleE8
 	eur := int64(85_000_000)

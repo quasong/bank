@@ -304,8 +304,10 @@ func toAccountBody(a Account) accountBody {
 	case currency.EUR:
 		details["iban"] = a.AccountNumber
 		details["bic"] = currency.BIC
-	default:
+	case currency.USD:
 		details["routing_number"] = currency.RoutingABA
+		details["account"] = currency.LocalAccount(a.AccountNumber)
+	default:
 		details["account"] = currency.LocalAccount(a.AccountNumber)
 	}
 	return accountBody{

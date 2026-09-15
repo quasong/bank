@@ -74,7 +74,7 @@ export function OverviewPage() {
       {accounts.length === 0 ? (
         <EmptyState
           title="Open your USD account"
-          body="One tap creates a US dollar balance. Add euros and pounds whenever you need them."
+          body="One tap creates a US dollar balance. Add euros, pounds, and other currencies whenever you need them."
           action={
             <button className="btn btn-primary" type="button" disabled={pending} onClick={() => void onOpen()}>
               {pending ? "Opening…" : "Open account"}

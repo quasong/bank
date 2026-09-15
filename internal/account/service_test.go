@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -26,6 +27,10 @@ func TestValidAccountNumber(t *testing.T) {
 	eur, err := currency.Issue(currency.EUR, "01234567")
 	if err != nil || !ValidAccountNumber(eur) || !ValidAccountNumber(currency.Format(eur)) {
 		t.Fatal("eur")
+	}
+	aud, err := currency.Issue(currency.AUD, "01234567")
+	if err != nil || !ValidAccountNumber(aud) || !ValidAccountNumber(currency.Format(aud)) {
+		t.Fatal("aud")
 	}
 }
 
@@ -59,6 +64,13 @@ func TestOpenSecondCurrencyDistinctCores(t *testing.T) {
 	}
 	if _, err := svc.Open(ctx, cid, currency.EUR); !errors.Is(err, ErrExists) {
 		t.Fatalf("dup eur: %v", err)
+	}
+	aud, err := svc.Open(ctx, cid, currency.AUD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(aud.AccountNumber, "AUD") || currency.Core(aud.AccountNumber) == currency.Core(usd.AccountNumber) {
+		t.Fatalf("aud %s usd %s", aud.AccountNumber, usd.AccountNumber)
 	}
 }
 

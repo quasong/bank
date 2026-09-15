@@ -5,6 +5,7 @@ import {
   activityKindLabel,
   activityTitle,
   copyText,
+  currencyDetailsHint,
   currencyName,
   currencyShortName,
   dateTimeLabel,
@@ -182,8 +183,34 @@ function FlagUK() {
   );
 }
 
+const FLAG_EMOJI: Record<string, string> = {
+  AUD: "🇦🇺",
+  BGN: "🇧🇬",
+  BRL: "🇧🇷",
+  CAD: "🇨🇦",
+  CHF: "🇨🇭",
+  CNY: "🇨🇳",
+  CZK: "🇨🇿",
+  DKK: "🇩🇰",
+  HKD: "🇭🇰",
+  ILS: "🇮🇱",
+  INR: "🇮🇳",
+  MXN: "🇲🇽",
+  MYR: "🇲🇾",
+  NOK: "🇳🇴",
+  NZD: "🇳🇿",
+  PHP: "🇵🇭",
+  PLN: "🇵🇱",
+  RON: "🇷🇴",
+  SEK: "🇸🇪",
+  SGD: "🇸🇬",
+  THB: "🇹🇭",
+  TRY: "🇹🇷",
+  ZAR: "🇿🇦",
+};
+
 export function CurrencyFlag({ code }: { code: string }) {
-  const flag = code === "EUR" ? <FlagEU /> : code === "GBP" ? <FlagUK /> : <FlagUS />;
+  const flag = code === "EUR" ? <FlagEU /> : code === "GBP" ? <FlagUK /> : code === "USD" ? <FlagUS /> : <span className="ccy-flag-emoji">{FLAG_EMOJI[code] ?? "🏳️"}</span>;
   return (
     <span className={`ccy-flag ccy-flag-${code}`} aria-hidden="true">
       {flag}
@@ -471,7 +498,7 @@ export function CurrencyChoices({
             <strong>
               {currencySymbol(ccy)} {currencyName(ccy)}
             </strong>
-            <em>{ccy === "EUR" ? "GB IBAN details" : ccy === "GBP" ? "UK sort code details" : "US ACH details"}</em>
+            <em>{currencyDetailsHint(ccy)}</em>
           </span>
         </button>
       ))}

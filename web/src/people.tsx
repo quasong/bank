@@ -75,7 +75,7 @@ export function SavePersonSheet({
           />
         </label>
         <p className={`avail${ownAccount ? " avail-warn" : ""}`}>
-          {ownAccount ? "That's your own account" : "USD ACH routing plus account, GBP sort code, or GB IBAN"}
+          {ownAccount ? "That's your own account" : "USD ACH, UK sort code, GB IBAN, or a local CODE · 8-digit account"}
         </p>
         <button className="btn btn-primary btn-block" type="submit" disabled={pending || !ready}>
           {pending ? "Saving…" : "Save"}

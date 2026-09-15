@@ -22,7 +22,7 @@ WHERE account_number = $1;
 SELECT id, customer_id, currency, account_number, status, balance_cents, opened_at
 FROM accounts
 WHERE customer_id = $1
-ORDER BY CASE currency WHEN 'USD' THEN 0 WHEN 'EUR' THEN 1 ELSE 2 END, opened_at;
+ORDER BY opened_at;
 
 -- name: LockAccountByID :one
 SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id AS ledger_id

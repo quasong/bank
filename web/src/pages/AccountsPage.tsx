@@ -88,7 +88,7 @@ export function AccountsPage() {
       {!acct ? (
         <EmptyState
           title="No account yet"
-          body="Open a USD account to hold a balance. You can add euros and pounds next."
+          body="Open a USD account to hold a balance. You can add more currencies next."
           action={
             <button className="btn btn-primary" type="button" disabled={pending} onClick={() => void onOpen()}>
               {pending ? "Opening…" : "Open account"}
@@ -172,7 +172,11 @@ export function AccountsPage() {
                 }}
               >
                 <span>Account number</span>
-                <strong>{formatLocalAccount(acct.details?.account || acct.account_number)}</strong>
+                <strong>
+                  {acct.currency === "USD" || acct.currency === "GBP"
+                    ? formatLocalAccount(acct.details?.account || acct.account_number)
+                    : formatAccountNumber(acct.account_number)}
+                </strong>
               </button>
             )}
             {acct.details?.routing_number ? (

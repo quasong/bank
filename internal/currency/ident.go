@@ -20,6 +20,9 @@ func Issue(code Code, core8 string) (string, error) {
 		bban := BankCode + SortCode + core8
 		return CountryGB + ibanCheck(bban, CountryGB) + bban, nil
 	default:
+		if code.Prefixed() {
+			return string(code) + core8, nil
+		}
 		return "", fmt.Errorf("unsupported currency")
 	}
 }
@@ -29,6 +32,9 @@ func Detect(canonical string) (Code, bool) {
 	switch {
 	case isEURIBAN(n):
 		return EUR, true
+	case isPrefixedNumber(n):
+		c, _ := Parse(n[:3])
+		return c, true
 	case len(n) == 14 && strings.HasPrefix(n, SortCode) && validCore(n[6:]):
 		return GBP, true
 	case isUSDACH(n):
@@ -69,6 +75,9 @@ func Core(canonical string) string {
 	case EUR:
 		return n[len(n)-8:]
 	default:
+		if code.Prefixed() && len(n) == 11 {
+			return n[3:]
+		}
 		return ""
 	}
 }
@@ -94,6 +103,9 @@ func Format(canonical string) string {
 		}
 		return b.String()
 	default:
+		if code.Prefixed() && len(n) == 11 {
+			return n[:3] + " · " + n[3:7] + " " + n[7:]
+		}
 		return n
 	}
 }
@@ -115,6 +127,14 @@ func compact(s string) string {
 		b.WriteRune(unicode.ToUpper(r))
 	}
 	return b.String()
+}
+
+func isPrefixedNumber(n string) bool {
+	if len(n) != 11 {
+		return false
+	}
+	c, ok := Parse(n[:3])
+	return ok && c.Prefixed() && validCore(n[3:])
 }
 
 func isUSDACH(n string) bool {
