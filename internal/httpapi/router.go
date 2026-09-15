@@ -41,6 +41,7 @@ func New(authH *auth.Handler, accountH *account.Handler, transferH *transfer.Han
 		r.Group(func(r chi.Router) {
 			r.Use(authH.Bearer)
 			r.Get("/me", authH.Me)
+			r.Get("/audit", authH.ListAudit)
 			r.Post("/accounts", accountH.Open)
 			r.Get("/accounts", accountH.List)
 			r.Get("/accounts/{id}", accountH.Get)

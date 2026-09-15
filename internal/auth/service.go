@@ -206,6 +206,26 @@ func (s *Service) Me(ctx context.Context, id uuid.UUID) (customer.Customer, erro
 	return rec.Customer, nil
 }
 
+func (s *Service) ListAudit(ctx context.Context, actorID uuid.UUID, limit, offset int32) ([]AuditRecord, error) {
+	if actorID == uuid.Nil {
+		return nil, ErrUnauthorized
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	out, err := s.store.ListAudit(ctx, actorID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []AuditRecord{}
+	}
+	return out, nil
+}
+
 func (s *Service) ParseAccess(token string) (uuid.UUID, error) {
 	id, _, err := s.tokens.ParseAccess(token)
 	return id, err

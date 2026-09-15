@@ -48,8 +48,8 @@ func run(log *slog.Logger) error {
 	authH := auth.NewHandler(authSvc, cfg.CookieSecure)
 	accountSvc := account.NewService(store)
 	payeeSvc := payee.NewService(store, store)
-	accountH := account.NewHandler(accountSvc, payeeSvc)
-	transferH := transfer.NewHandler(transfer.NewService(store), payeeSvc)
+	accountH := account.NewHandler(accountSvc, payeeSvc, store)
+	transferH := transfer.NewHandler(transfer.NewService(store), payeeSvc, store)
 	payeeH := payee.NewHandler(payeeSvc)
 	handler := httpapi.New(authH, accountH, transferH, payeeH, cfg.WebDist, log)
 

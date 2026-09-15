@@ -8,12 +8,12 @@ FROM ledger_accounts
 WHERE account_id = $1;
 
 -- name: InsertJournal :one
-INSERT INTO journals (id, description, kind, idempotency_key)
-VALUES ($1, $2, $3, $4)
-RETURNING id, created_at, description, kind, idempotency_key;
+INSERT INTO journals (id, description, note, kind, idempotency_key)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, created_at, description, note, kind, idempotency_key;
 
 -- name: GetJournalByIdempotencyKey :one
-SELECT id, created_at, description, kind, idempotency_key
+SELECT id, created_at, description, note, kind, idempotency_key
 FROM journals
 WHERE idempotency_key = $1;
 
@@ -42,6 +42,7 @@ SELECT
     j.description,
     jl.side,
     jl.amount_cents,
+    j.note,
     (
         SELECT a.account_number
         FROM journal_lines ojl

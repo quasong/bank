@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -143,6 +144,46 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 			CreatedAt: cust.CreatedAt.UTC().Format(time.RFC3339),
 		},
 	})
+}
+
+func (h *Handler) ListAudit(w http.ResponseWriter, r *http.Request) {
+	id, ok := CustomerIDFrom(r.Context())
+	if !ok {
+		WriteError(w, http.StatusUnauthorized, "unauthorized", "please sign in again")
+		return
+	}
+	limit := int32(50)
+	offset := int32(0)
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = int32(n)
+		}
+	}
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			offset = int32(n)
+		}
+	}
+	items, err := h.svc.ListAudit(r.Context(), id, limit, offset)
+	if err != nil {
+		writeAuthError(w, err)
+		return
+	}
+	out := make([]map[string]any, 0, len(items))
+	for _, e := range items {
+		item := map[string]any{
+			"id":         e.ID.String(),
+			"action":     e.Action,
+			"created_at": e.CreatedAt.UTC().Format(time.RFC3339),
+		}
+		if e.Metadata != nil {
+			item["metadata"] = e.Metadata
+		} else {
+			item["metadata"] = map[string]string{}
+		}
+		out = append(out, item)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": out})
 }
 
 func (h *Handler) Bearer(next http.Handler) http.Handler {

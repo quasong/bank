@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"bank/internal/audit"
 	"bank/internal/auth"
 	"bank/internal/ledger"
 	"bank/internal/moneyjson"
@@ -20,6 +21,7 @@ import (
 type Handler struct {
 	svc   *Service
 	names PayeeNames
+	audit Auditor
 }
 
 // PayeeNames attaches saved payee display names onto activity items.
@@ -27,8 +29,12 @@ type PayeeNames interface {
 	Names(ctx context.Context, customerID uuid.UUID) (map[string]string, error)
 }
 
-func NewHandler(svc *Service, names PayeeNames) *Handler {
-	return &Handler{svc: svc, names: names}
+type Auditor interface {
+	InsertAudit(ctx context.Context, rec auth.AuditRecord) error
+}
+
+func NewHandler(svc *Service, names PayeeNames, auditor Auditor) *Handler {
+	return &Handler{svc: svc, names: names, audit: auditor}
 }
 
 type accountBody struct {
@@ -113,6 +119,9 @@ func (h *Handler) Fund(w http.ResponseWriter, r *http.Request) {
 		writeAccountError(w, err)
 		return
 	}
+	if !replay {
+		h.recordMoney(r, customerID, audit.Funding, acct, journal, amount)
+	}
 	status := http.StatusCreated
 	if replay {
 		status = http.StatusOK
@@ -145,6 +154,9 @@ func (h *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 		writeAccountError(w, err)
 		return
 	}
+	if !replay {
+		h.recordMoney(r, customerID, audit.Withdrawal, acct, journal, amount)
+	}
 	status := http.StatusCreated
 	if replay {
 		status = http.StatusOK
@@ -157,26 +169,34 @@ func (h *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Freeze(w http.ResponseWriter, r *http.Request) {
-	h.writeStatusChange(w, r, h.svc.Freeze)
+	h.writeStatusChange(w, r, h.svc.Freeze, audit.AccountFreeze)
 }
 
 func (h *Handler) Unfreeze(w http.ResponseWriter, r *http.Request) {
-	h.writeStatusChange(w, r, h.svc.Unfreeze)
+	h.writeStatusChange(w, r, h.svc.Unfreeze, audit.AccountUnfreeze)
 }
 
 func (h *Handler) Close(w http.ResponseWriter, r *http.Request) {
-	h.writeStatusChange(w, r, h.svc.Close)
+	h.writeStatusChange(w, r, h.svc.Close, audit.AccountClose)
 }
 
-func (h *Handler) writeStatusChange(w http.ResponseWriter, r *http.Request, fn func(ctx context.Context, customerID, accountID uuid.UUID) (Account, error)) {
+func (h *Handler) writeStatusChange(w http.ResponseWriter, r *http.Request, fn func(ctx context.Context, customerID, accountID uuid.UUID) (Account, error), action string) {
 	customerID, acctID, ok := pathAccount(w, r)
 	if !ok {
+		return
+	}
+	before, err := h.svc.GetOwned(r.Context(), customerID, acctID)
+	if err != nil {
+		writeAccountError(w, err)
 		return
 	}
 	acct, err := fn(r.Context(), customerID, acctID)
 	if err != nil {
 		writeAccountError(w, err)
 		return
+	}
+	if before.Status != acct.Status {
+		h.recordStatus(r, customerID, action, acct)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"account": toAccountBody(acct)})
 }
@@ -220,6 +240,9 @@ func (h *Handler) Activity(w http.ResponseWriter, r *http.Request) {
 			"side":         string(e.Side),
 			"amount_cents": e.AmountCents,
 			"signed_cents": e.SignedCents,
+		}
+		if e.Note != "" {
+			item["note"] = e.Note
 		}
 		if e.CounterpartyNumber != "" {
 			item["counterparty_account_number"] = e.CounterpartyNumber
@@ -270,9 +293,46 @@ func toJournalBody(j ledger.Journal) journalBody {
 	}
 }
 
+func (h *Handler) recordMoney(r *http.Request, customerID uuid.UUID, action string, acct Account, journal ledger.Journal, amountCents int64) {
+	if h.audit == nil {
+		return
+	}
+	_ = h.audit.InsertAudit(r.Context(), auth.AuditRecord{
+		ID:        uuid.New(),
+		ActorID:   &customerID,
+		Action:    action,
+		IP:        audit.ClientIP(r),
+		UserAgent: r.UserAgent(),
+		Metadata: map[string]string{
+			"account_id":     acct.ID.String(),
+			"account_number": acct.AccountNumber,
+			"amount_cents":   strconv.FormatInt(amountCents, 10),
+			"journal_id":     journal.ID.String(),
+		},
+	})
+}
+
+func (h *Handler) recordStatus(r *http.Request, customerID uuid.UUID, action string, acct Account) {
+	if h.audit == nil {
+		return
+	}
+	_ = h.audit.InsertAudit(r.Context(), auth.AuditRecord{
+		ID:        uuid.New(),
+		ActorID:   &customerID,
+		Action:    action,
+		IP:        audit.ClientIP(r),
+		UserAgent: r.UserAgent(),
+		Metadata: map[string]string{
+			"account_id":     acct.ID.String(),
+			"account_number": acct.AccountNumber,
+			"status":         string(acct.Status),
+		},
+	})
+}
+
 func writeAccountError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, ErrInvalidRequest), errors.Is(err, ErrInvalidAmount), errors.Is(err, ErrIdempotency), errors.Is(err, ledger.ErrInvalidAmount), errors.Is(err, ledger.ErrUnbalanced), errors.Is(err, ledger.ErrIdempotency):
+	case errors.Is(err, ErrInvalidRequest), errors.Is(err, ErrInvalidAmount), errors.Is(err, ErrIdempotency), errors.Is(err, ledger.ErrInvalidAmount), errors.Is(err, ledger.ErrUnbalanced), errors.Is(err, ledger.ErrIdempotency), errors.Is(err, ledger.ErrInvalidNote):
 		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid request")
 	case errors.Is(err, ErrExists):
 		auth.WriteError(w, http.StatusConflict, "account_exists", "a deposit account already exists")

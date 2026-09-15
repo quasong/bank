@@ -52,7 +52,10 @@ export function activityHint(
   signedCents = 0,
   counterpartyNumber?: string,
   counterpartyName?: string,
+  note?: string,
 ): string {
+  const memo = (note ?? "").trim();
+  if (memo) return memo;
   if (kind === "funding") return "Added instantly";
   if (kind === "withdrawal") return "Cashed out";
   if (kind === "transfer") {
@@ -161,4 +164,37 @@ export function statusLabel(status: string): string {
   if (status === "frozen") return "Frozen";
   if (status === "closed") return "Closed";
   return status;
+}
+
+export function auditLabel(action: string): string {
+  switch (action) {
+    case "register":
+      return "Created profile";
+    case "login_success":
+      return "Signed in";
+    case "login_failed":
+      return "Failed sign-in";
+    case "logout":
+      return "Signed out";
+    case "funding":
+      return "Added money";
+    case "withdrawal":
+      return "Withdrew money";
+    case "transfer":
+      return "Sent money";
+    case "account_freeze":
+      return "Froze account";
+    case "account_unfreeze":
+      return "Unfroze account";
+    case "account_close":
+      return "Closed account";
+    default:
+      return action;
+  }
+}
+
+export function auditAmount(meta?: Record<string, string>): string {
+  const raw = meta?.amount_cents ?? "";
+  if (!/^-?\d+$/.test(raw)) return "";
+  return formatUSD(Number(raw));
 }

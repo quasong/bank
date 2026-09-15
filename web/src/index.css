@@ -575,6 +575,11 @@ button.fact {
   border-top: 0;
 }
 
+.panel.facts .day-label {
+  margin: 0;
+  padding: 14px 18px 4px;
+}
+
 .fact span {
   color: var(--muted);
   font-size: 13px;

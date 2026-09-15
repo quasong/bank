@@ -363,8 +363,14 @@ export function TxnRow({ item, onOpen }: { item: ActivityItem; onOpen?: (item: A
       <div className="txn-copy">
         <strong>{activityTitle(item.kind, item.signed_cents)}</strong>
         <span>
-          {activityHint(item.kind, item.signed_cents, item.counterparty_account_number, item.counterparty_name)} ·{" "}
-          {recentWhen(item.created_at)}
+          {activityHint(
+            item.kind,
+            item.signed_cents,
+            item.counterparty_account_number,
+            item.counterparty_name,
+            item.note,
+          )}{" "}
+          · {recentWhen(item.created_at)}
         </span>
       </div>
       <MoneyText cents={item.signed_cents} signed />
@@ -406,6 +412,12 @@ export function TxnDetail({ item, onClose }: { item: ActivityItem; onClose: () =
           <span>Type</span>
           <strong>{activityKindLabel(item.kind, item.signed_cents)}</strong>
         </div>
+        {item.note ? (
+          <div>
+            <span>Note</span>
+            <strong>{item.note}</strong>
+          </div>
+        ) : null}
         {counterparty ? (
           <div>
             <span>{item.signed_cents >= 0 ? "From" : "To"}</span>

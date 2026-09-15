@@ -11,14 +11,20 @@ export function TransfersPage() {
   const { payees, reload: reloadPayees } = usePayees();
   const [toNumber, setToNumber] = useState("");
   const [payeeName, setPayeeName] = useState("");
+  const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
   const [step, setStep] = useState<"edit" | "confirm">("edit");
   const [pending, setPending] = useState(false);
   const [copied, setCopied] = useState(false);
   const { text: toast, show } = useToast();
-  const [sent, setSent] = useState<{ amount: string; to: string; left: string; journalId: string; receipt: string } | null>(
-    null,
-  );
+  const [sent, setSent] = useState<{
+    amount: string;
+    to: string;
+    left: string;
+    journalId: string;
+    receipt: string;
+    note: string;
+  } | null>(null);
 
   const selected = accounts?.[0];
   const blocked = selected != null && selected.status !== "active";
@@ -77,7 +83,7 @@ export function TransfersPage() {
     setError("");
     setPending(true);
     try {
-      const res = await createTransfer(selected.id, toNumber, cents, crypto.randomUUID(), payeeName);
+      const res = await createTransfer(selected.id, toNumber, cents, crypto.randomUUID(), payeeName, note);
       const next = await reload();
       await reloadPayees().catch(() => undefined);
       const left = next[0]?.balance_cents ?? selected.balance_cents - cents;
@@ -87,6 +93,7 @@ export function TransfersPage() {
         left: formatUSD(left),
         journalId: res.transfer.journal_id,
         receipt: receiptCode(res.transfer.journal_id, res.transfer.receipt),
+        note: res.transfer.note || note.trim(),
       });
       setCopied(false);
     } catch (err) {
@@ -127,6 +134,12 @@ export function TransfersPage() {
           <h2>You sent {sent.amount}</h2>
           <p>
             To {sent.to}
+            {sent.note ? (
+              <>
+                <br />
+                {sent.note}
+              </>
+            ) : null}
             <br />
             {sent.left} left in your account
           </p>
@@ -154,6 +167,7 @@ export function TransfersPage() {
               setSent(null);
               setToNumber("");
               setPayeeName("");
+              setNote("");
               setAmount("");
               setStep("edit");
               setCopied(false);
@@ -188,6 +202,12 @@ export function TransfersPage() {
               <div>
                 <span>Account</span>
                 <strong>{formatAccountNumber(toNumber)}</strong>
+              </div>
+            ) : null}
+            {note.trim() ? (
+              <div>
+                <span>Note</span>
+                <strong>{note.trim()}</strong>
               </div>
             ) : null}
             <div>
@@ -252,6 +272,18 @@ export function TransfersPage() {
             placeholder="Optional"
             autoComplete="off"
             aria-label="Payee name"
+          />
+        </label>
+        <label>
+          Note
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value.slice(0, 40))}
+            disabled={blocked}
+            maxLength={40}
+            placeholder="Optional"
+            autoComplete="off"
+            aria-label="Transfer note"
           />
         </label>
         {saved.length > 0 ? (

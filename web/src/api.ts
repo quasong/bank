@@ -128,6 +128,14 @@ export type ActivityItem = {
   signed_cents: number;
   counterparty_account_number?: string;
   counterparty_name?: string;
+  note?: string;
+};
+
+export type AuditEvent = {
+  id: string;
+  action: string;
+  created_at: string;
+  metadata: Record<string, string>;
 };
 
 export type Payee = {
@@ -178,6 +186,7 @@ export function createTransfer(
   amountCents: number,
   idempotencyKey: string,
   payeeName?: string,
+  note?: string,
 ) {
   const body: Record<string, unknown> = {
     from_account_id: fromAccountId,
@@ -189,6 +198,10 @@ export function createTransfer(
   if (name) {
     body.payee_name = name.slice(0, 40);
   }
+  const memo = note?.trim();
+  if (memo) {
+    body.note = memo.slice(0, 40);
+  }
   return request<{
     transfer: {
       journal_id: string;
@@ -196,6 +209,7 @@ export function createTransfer(
       replay: boolean;
       from_balance_cents: number;
       to_account_number: string;
+      note?: string;
     };
   }>("/api/v1/transfers", {
     method: "POST",
@@ -209,4 +223,8 @@ export function listPayees() {
 
 export function listActivity(accountId: string) {
   return request<{ items: ActivityItem[] }>(`/api/v1/accounts/${accountId}/activity`);
+}
+
+export function listAudit() {
+  return request<{ events: AuditEvent[] }>("/api/v1/audit");
 }

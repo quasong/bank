@@ -38,6 +38,7 @@ type AuditRecord struct {
 	IP        string
 	UserAgent string
 	Metadata  map[string]string
+	CreatedAt time.Time
 }
 
 type Store interface {
@@ -48,4 +49,5 @@ type Store interface {
 	RotateRefreshToken(ctx context.Context, presentedHash string, next NewRefresh, now time.Time) (RefreshRecord, error)
 	RevokeRefreshTokenByHash(ctx context.Context, hash string, now time.Time) error
 	InsertAudit(ctx context.Context, rec AuditRecord) error
+	ListAudit(ctx context.Context, actorID uuid.UUID, limit, offset int32) ([]AuditRecord, error)
 }

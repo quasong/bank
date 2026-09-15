@@ -27,7 +27,7 @@ func NewService(store account.Store) *Service {
 	return &Service{store: store}
 }
 
-func (s *Service) Execute(ctx context.Context, customerID, fromID uuid.UUID, toNumber string, amountCents int64, idempotencyKey string) (Result, error) {
+func (s *Service) Execute(ctx context.Context, customerID, fromID uuid.UUID, toNumber string, amountCents int64, idempotencyKey, note string) (Result, error) {
 	if amountCents <= 0 {
 		return Result{}, account.ErrInvalidAmount
 	}
@@ -38,6 +38,10 @@ func (s *Service) Execute(ctx context.Context, customerID, fromID uuid.UUID, toN
 	toNumber = strings.TrimSpace(toNumber)
 	if !account.ValidAccountNumber(toNumber) {
 		return Result{}, account.ErrInvalidRequest
+	}
+	note, err := ledger.NormalizeNote(note)
+	if err != nil {
+		return Result{}, err
 	}
 
 	from, err := s.store.GetByID(ctx, fromID)
@@ -67,6 +71,7 @@ func (s *Service) Execute(ctx context.Context, customerID, fromID uuid.UUID, toN
 	j := ledger.Journal{
 		ID:             uuid.New(),
 		Description:    fmt.Sprintf("Transfer %d cents from %s to %s", amountCents, from.AccountNumber, to.AccountNumber),
+		Note:           note,
 		Kind:           ledger.KindTransfer,
 		IdempotencyKey: key,
 		Lines: []ledger.Line{

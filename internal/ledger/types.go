@@ -41,6 +41,7 @@ type Journal struct {
 	ID             uuid.UUID
 	CreatedAt      time.Time
 	Description    string
+	Note           string
 	Kind           Kind
 	IdempotencyKey string
 	Lines          []Line
@@ -51,6 +52,7 @@ type Entry struct {
 	CreatedAt          time.Time
 	Kind               Kind
 	Description        string
+	Note               string
 	Side               Side
 	AmountCents        int64
 	SignedCents        int64

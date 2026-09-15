@@ -166,10 +166,10 @@ func (s *Store) Post(ctx context.Context, journal ledger.Journal, deltas map[uui
 	}
 
 	const insertJ = `
-		INSERT INTO journals (id, description, kind, idempotency_key)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO journals (id, description, note, kind, idempotency_key)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING created_at`
-	err = tx.QueryRow(ctx, insertJ, journal.ID, journal.Description, string(journal.Kind), journal.IdempotencyKey).Scan(&journal.CreatedAt)
+	err = tx.QueryRow(ctx, insertJ, journal.ID, journal.Description, journal.Note, string(journal.Kind), journal.IdempotencyKey).Scan(&journal.CreatedAt)
 	if err != nil {
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) && pe.Code == "23505" {
@@ -211,7 +211,7 @@ func (s *Store) Post(ctx context.Context, journal ledger.Journal, deltas map[uui
 
 func (s *Store) Activity(ctx context.Context, accountID uuid.UUID, limit, offset int32) ([]ledger.Entry, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT j.id, j.created_at, j.kind, j.description, jl.side, jl.amount_cents,
+		SELECT j.id, j.created_at, j.kind, j.description, jl.side, jl.amount_cents, j.note,
 			(
 				SELECT a.account_number
 				FROM journal_lines ojl
@@ -235,7 +235,7 @@ func (s *Store) Activity(ctx context.Context, accountID uuid.UUID, limit, offset
 	for rows.Next() {
 		var e ledger.Entry
 		var counterparty *string
-		if err := rows.Scan(&e.JournalID, &e.CreatedAt, &e.Kind, &e.Description, &e.Side, &e.AmountCents, &counterparty); err != nil {
+		if err := rows.Scan(&e.JournalID, &e.CreatedAt, &e.Kind, &e.Description, &e.Side, &e.AmountCents, &e.Note, &counterparty); err != nil {
 			return nil, err
 		}
 		if counterparty != nil {
@@ -257,9 +257,9 @@ func (s *Store) Activity(ctx context.Context, accountID uuid.UUID, limit, offset
 func (s *Store) journalByKey(ctx context.Context, key string) (ledger.Journal, error) {
 	var j ledger.Journal
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, created_at, description, kind, idempotency_key
+		SELECT id, created_at, description, note, kind, idempotency_key
 		FROM journals WHERE idempotency_key = $1`, key).Scan(
-		&j.ID, &j.CreatedAt, &j.Description, &j.Kind, &j.IdempotencyKey,
+		&j.ID, &j.CreatedAt, &j.Description, &j.Note, &j.Kind, &j.IdempotencyKey,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ledger.Journal{}, ledger.ErrNotFound

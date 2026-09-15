@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { closeAccount, errorMessage, freezeAccount, openAccount, unfreezeAccount } from "../api";
-import { copyText, formatAccountNumber, openedLabel } from "../format";
-import { useAccounts, useToast } from "../hooks";
+import { auditAmount, auditLabel, copyText, formatAccountNumber, openedLabel, recentWhen } from "../format";
+import { useAccounts, useAudit, useToast } from "../hooks";
 import { MoneySheet } from "../moneyflow";
 import { AccountHero, Banner, EmptyState, IconArrow, IconFreeze, IconMinus, IconPlus, Page, PageSkeleton, Sheet, Toast } from "../ui";
 
@@ -10,6 +10,7 @@ type MoneyKind = "fund" | "withdraw";
 
 export function AccountsPage() {
   const { accounts, error, setError, reload } = useAccounts();
+  const { events, reload: reloadAudit } = useAudit();
   const { text: toast, show } = useToast();
   const [pending, setPending] = useState(false);
   const [form, setForm] = useState<MoneyKind | null>(null);
@@ -33,6 +34,7 @@ export function AccountsPage() {
       await openAccount();
       await reload();
       show("Account opened");
+      await reloadAudit().catch(() => undefined);
     } catch (err) {
       setError(errorMessage(err, "Could not open account"));
     } finally {
@@ -44,6 +46,7 @@ export function AccountsPage() {
     setForm(null);
     show(message);
     await reload();
+    await reloadAudit().catch(() => undefined);
   }
 
   async function runStatus(action: () => Promise<unknown>, message: string) {
@@ -55,6 +58,7 @@ export function AccountsPage() {
       setFreezing(false);
       show(message);
       await reload();
+      await reloadAudit().catch(() => undefined);
     } catch (err) {
       setError(errorMessage(err, "Could not update account"));
     } finally {
@@ -145,6 +149,26 @@ export function AccountsPage() {
               <strong>{openedLabel(acct.opened_at)}</strong>
             </div>
           </section>
+          {events && events.length > 0 ? (
+            <section className="panel facts">
+              <p className="day-label">Account log</p>
+              {events.slice(0, 12).map((ev) => {
+                const amount = auditAmount(ev.metadata);
+                return (
+                  <div className="fact" key={ev.id}>
+                    <span>
+                      {auditLabel(ev.action)}
+                      {ev.metadata?.note ? ` · ${ev.metadata.note}` : ""}
+                    </span>
+                    <strong>
+                      {amount ? `${amount} · ` : ""}
+                      {recentWhen(ev.created_at)}
+                    </strong>
+                  </div>
+                );
+              })}
+            </section>
+          ) : null}
           {acct.status === "active" ? (
             <div className="manage">
               <button className="btn btn-quiet" type="button" disabled={pending} onClick={() => setClosing(true)}>

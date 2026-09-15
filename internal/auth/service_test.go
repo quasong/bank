@@ -41,6 +41,10 @@ func TestRegisterAndLogin(t *testing.T) {
 	if !slices.Contains(store.actions(), audit.Register) || !slices.Contains(store.actions(), audit.LoginSuccess) {
 		t.Fatalf("audit log missing: %v", store.actions())
 	}
+	events, err := svc.ListAudit(ctx, sess.Customer.ID, 50, 0)
+	if err != nil || len(events) < 2 {
+		t.Fatalf("list audit %+v %v", events, err)
+	}
 }
 
 func TestRegisterDuplicateEmail(t *testing.T) {

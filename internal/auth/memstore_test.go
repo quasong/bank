@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -111,8 +112,38 @@ func (m *memStore) RevokeRefreshTokenByHash(_ context.Context, hash string, now 
 func (m *memStore) InsertAudit(_ context.Context, rec AuditRecord) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = time.Now().UTC()
+	}
 	m.audits = append(m.audits, rec)
 	return nil
+}
+
+func (m *memStore) ListAudit(_ context.Context, actorID uuid.UUID, limit, offset int32) ([]AuditRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var matched []AuditRecord
+	for _, a := range m.audits {
+		if a.ActorID != nil && *a.ActorID == actorID {
+			matched = append(matched, a)
+		}
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		if !matched[i].CreatedAt.Equal(matched[j].CreatedAt) {
+			return matched[i].CreatedAt.After(matched[j].CreatedAt)
+		}
+		return matched[i].ID.String() > matched[j].ID.String()
+	})
+	if offset >= int32(len(matched)) {
+		return []AuditRecord{}, nil
+	}
+	matched = matched[offset:]
+	if limit > 0 && int32(len(matched)) > limit {
+		matched = matched[:limit]
+	}
+	out := make([]AuditRecord, len(matched))
+	copy(out, matched)
+	return out, nil
 }
 
 func (m *memStore) lock(email string) {

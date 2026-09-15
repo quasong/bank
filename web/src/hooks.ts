@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listAccounts, listActivity, listPayees, type ActivityItem, type BankAccount, type Payee } from "./api";
+import { listAccounts, listActivity, listAudit, listPayees, type ActivityItem, type AuditEvent, type BankAccount, type Payee } from "./api";
 
 export function useAccounts() {
   const [accounts, setAccounts] = useState<BankAccount[] | null>(null);
@@ -52,6 +52,22 @@ export function usePayees() {
   }, [reload]);
 
   return { payees, reload };
+}
+
+export function useAudit() {
+  const [events, setEvents] = useState<AuditEvent[] | null>(null);
+
+  const reload = useCallback(async () => {
+    const data = await listAudit();
+    setEvents(data.events);
+    return data.events;
+  }, []);
+
+  useEffect(() => {
+    reload().catch(() => setEvents([]));
+  }, [reload]);
+
+  return { events, reload };
 }
 
 export function useToast(ms = 2400) {

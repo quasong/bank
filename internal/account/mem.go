@@ -179,6 +179,7 @@ func (m *MemStore) Post(_ context.Context, journal ledger.Journal, deltas map[uu
 			CreatedAt:          journal.CreatedAt,
 			Kind:               journal.Kind,
 			Description:        journal.Description,
+			Note:               journal.Note,
 			Side:               ln.Side,
 			AmountCents:        ln.AmountCents,
 			SignedCents:        signed,

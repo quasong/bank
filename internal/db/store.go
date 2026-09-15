@@ -131,6 +131,36 @@ func (s *Store) InsertAudit(ctx context.Context, rec auth.AuditRecord) error {
 	return err
 }
 
+func (s *Store) ListAudit(ctx context.Context, actorID uuid.UUID, limit, offset int32) ([]auth.AuditRecord, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, action, ip, user_agent, metadata, created_at
+		FROM audit_logs
+		WHERE actor_id = $1
+		ORDER BY created_at DESC, id DESC
+		LIMIT $2 OFFSET $3`, actorID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]auth.AuditRecord, 0)
+	for rows.Next() {
+		var rec auth.AuditRecord
+		var meta []byte
+		if err := rows.Scan(&rec.ID, &rec.Action, &rec.IP, &rec.UserAgent, &meta, &rec.CreatedAt); err != nil {
+			return nil, err
+		}
+		rec.ActorID = &actorID
+		if len(meta) > 0 {
+			_ = json.Unmarshal(meta, &rec.Metadata)
+		}
+		if rec.Metadata == nil {
+			rec.Metadata = map[string]string{}
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
 type querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
