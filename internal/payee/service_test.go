@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"bank/internal/account"
+	"bank/internal/currency"
 )
 
 func testEnv(t *testing.T) (*Service, *account.Service, *account.MemStore, uuid.UUID, uuid.UUID, account.Account, account.Account) {
@@ -83,7 +84,7 @@ func TestUpsertRejectsOwnAccount(t *testing.T) {
 func TestUpsertRejectsUnknownNumber(t *testing.T) {
 	ctx := context.Background()
 	svc, _, _, aCust, _, _, _ := testEnv(t)
-	_, err := svc.Upsert(ctx, aCust, "00000000", "Ghost")
+	_, err := svc.Upsert(ctx, aCust, currency.RoutingABA+"00000000", "Ghost")
 	if !errors.Is(err, account.ErrNotFound) {
 		t.Fatalf("got %v", err)
 	}

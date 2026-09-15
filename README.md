@@ -74,7 +74,7 @@ See [.env.example](.env.example). `JWT_SECRET` must be at least 32 bytes. Local 
 
 Deposits are ledger liabilities. Demo funding debits vault cash in that currency and credits the customer account. A transfer debits the sender and credits the destination in one transaction, and only works in the same currency. Amounts are integer minor units (`int64`), never `float64`.
 
-USD numbers are 8 digits. GBP is sort code `04-00-04` plus those 8 digits. EUR is a GB IBAN `GB##THEB040004########` (ISO 13616 checksum) with BIC `THEBGB2L`. ACH routing is `121174841`. These identifiers mimic real formats; they are not issued by a real bank.
+USD is an ACH destination: routing `121000248` (fictional ABA with a valid checksum) plus an 8-digit DDA, stored as `121000248########`. GBP is sort code `04-00-04` plus those 8 digits. EUR is a GB IBAN `GB##THEB040004########` (ISO 13616 checksum) with BIC `THEBGB2L`. These identifiers mimic real formats; they are not issued by a real bank.
 
 Cross-currency conversion withdraws from the source vault and funds the destination vault in one journal, balanced per currency. Live rates come from [Frankfurter](https://api.frankfurter.dev/v1) (ECB), cached for about a minute, and converted with `rate_e8` integer math (half-up). The destination pocket is opened automatically if needed.
 

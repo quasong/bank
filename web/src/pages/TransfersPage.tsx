@@ -12,6 +12,7 @@ import {
   payeeLabel,
   receiptCode,
   statusLabel,
+  USD_ROUTING,
 } from "../format";
 import { centsToDollars, dollarsToCents } from "../money";
 import { useAccounts, usePayees, useSelectedAccount, useToast } from "../hooks";
@@ -308,7 +309,7 @@ export function TransfersPage() {
             onChange={(e) => setToNumber(compactAccountInput(e.target.value))}
             disabled={blocked}
             maxLength={29}
-            placeholder={selected?.currency === "EUR" ? "GB IBAN" : selected?.currency === "GBP" ? "04-00-04 · account" : "0000 · 0000"}
+            placeholder={selected?.currency === "EUR" ? "GB IBAN" : selected?.currency === "GBP" ? "04-00-04 · account" : `${USD_ROUTING} · account`}
             autoComplete="off"
             aria-label="Destination account number"
           />

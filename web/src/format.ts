@@ -1,4 +1,5 @@
 export const CURRENCIES = ["USD", "EUR", "GBP"] as const;
+export const USD_ROUTING = "121000248";
 
 export function usdParts(cents: number): { sign: string; dollars: string; frac: string } {
   const neg = cents < 0;
@@ -37,7 +38,9 @@ export function shortAccountLabel(n: string, ccy?: string): string {
   if (ccy === "GBP" || compact.length === 14) {
     return `${compact.slice(0, 2)}-${compact.slice(2, 4)}-${compact.slice(4, 6)} · ${compact.slice(-4)}`;
   }
-  if (compact.length === 8) return `${compact.slice(0, 4)} · ${compact.slice(4)}`;
+  if (ccy === "USD" || compact.startsWith(USD_ROUTING) || compact.length === 17) {
+    return `ACH · ${compact.slice(-4)}`;
+  }
   return formatAccountNumber(n);
 }
 
@@ -53,7 +56,7 @@ export function compactAccountInput(raw: string, max = 22): string {
 
 export function accountLooksReady(n: string): boolean {
   const c = compactAccountInput(n);
-  return /^\d{8}$/.test(c) || /^040004\d{8}$/.test(c) || /^GB\d{2}THEB040004\d{8}$/.test(c);
+  return new RegExp(`^${USD_ROUTING}\\d{8}$`).test(c) || /^040004\d{8}$/.test(c) || /^GB\d{2}THEB040004\d{8}$/.test(c);
 }
 
 export function accountCurrencyOf(n: string): string {
@@ -65,7 +68,9 @@ export function accountCurrencyOf(n: string): string {
 
 export function formatAccountNumber(n: string): string {
   const compact = compactAccountInput(n);
-  if (/^\d{8}$/.test(compact)) return `${compact.slice(0, 4)} · ${compact.slice(4)}`;
+  if (new RegExp(`^${USD_ROUTING}\\d{8}$`).test(compact)) {
+    return `${compact.slice(0, 9)} · ${compact.slice(9, 13)} ${compact.slice(13)}`;
+  }
   if (/^040004\d{8}$/.test(compact)) {
     return `${compact.slice(0, 2)}-${compact.slice(2, 4)}-${compact.slice(4, 6)} · ${compact.slice(6, 10)} ${compact.slice(6 + 4)}`;
   }
@@ -81,7 +86,7 @@ export function maskAccountInput(raw: string): string {
   if (/^GB/i.test(compact) || /[A-Z]/.test(compact)) {
     return compact.replace(/(.{4})/g, "$1 ").trim();
   }
-  if (compact.startsWith("040004") || compact.length > 8) {
+  if (compact.startsWith("040004")) {
     const d = compact.replace(/\D/g, "").slice(0, 14);
     if (d.length <= 6) {
       if (d.length <= 2) return d;
@@ -90,9 +95,10 @@ export function maskAccountInput(raw: string): string {
     }
     return `${d.slice(0, 2)}-${d.slice(2, 4)}-${d.slice(4, 6)} · ${d.slice(6, 10)}${d.length > 10 ? ` ${d.slice(10)}` : ""}`;
   }
-  const d = compact.replace(/\D/g, "").slice(0, 8);
-  if (d.length <= 4) return d;
-  return `${d.slice(0, 4)} · ${d.slice(4)}`;
+  const d = compact.replace(/\D/g, "").slice(0, 17);
+  if (d.length <= 9) return d;
+  const acct = d.slice(9);
+  return `${d.slice(0, 9)} · ${acct.slice(0, 4)}${acct.length > 4 ? ` ${acct.slice(4)}` : ""}`;
 }
 
 export function greeting(now = new Date()): string {

@@ -306,7 +306,7 @@ func toAccountBody(a Account) accountBody {
 		details["bic"] = currency.BIC
 	default:
 		details["routing_number"] = currency.RoutingABA
-		details["account"] = a.AccountNumber
+		details["account"] = currency.LocalAccount(a.AccountNumber)
 	}
 	return accountBody{
 		ID:                     a.ID.String(),

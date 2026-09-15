@@ -43,7 +43,7 @@ CREATE TABLE accounts (
     opened_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (customer_id, currency),
     CHECK (
-        (currency = 'USD' AND account_number ~ '^[0-9]{8}$')
+        (currency = 'USD' AND account_number ~ '^121000248[0-9]{8}$')
         OR (currency = 'GBP' AND account_number ~ '^040004[0-9]{8}$')
         OR (currency = 'EUR' AND account_number ~ '^GB[0-9]{2}THEB040004[0-9]{8}$')
     )
@@ -89,7 +89,7 @@ CREATE TABLE payees (
     id UUID PRIMARY KEY,
     customer_id UUID NOT NULL REFERENCES customers (id),
     account_number TEXT NOT NULL CHECK (
-        account_number ~ '^[0-9]{8}$'
+        account_number ~ '^121000248[0-9]{8}$'
         OR account_number ~ '^040004[0-9]{8}$'
         OR account_number ~ '^GB[0-9]{2}THEB040004[0-9]{8}$'
     ),

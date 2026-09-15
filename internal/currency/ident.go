@@ -13,7 +13,7 @@ func Issue(code Code, core8 string) (string, error) {
 	}
 	switch code {
 	case USD:
-		return core8, nil
+		return RoutingABA + core8, nil
 	case GBP:
 		return SortCode + core8, nil
 	case EUR:
@@ -27,12 +27,12 @@ func Issue(code Code, core8 string) (string, error) {
 func Detect(canonical string) (Code, bool) {
 	n := compact(canonical)
 	switch {
-	case validCore(n):
-		return USD, true
-	case len(n) == 14 && strings.HasPrefix(n, SortCode) && validCore(n[6:]):
-		return GBP, true
 	case isEURIBAN(n):
 		return EUR, true
+	case len(n) == 14 && strings.HasPrefix(n, SortCode) && validCore(n[6:]):
+		return GBP, true
+	case isUSDACH(n):
+		return USD, true
 	default:
 		return "", false
 	}
@@ -60,7 +60,7 @@ func Core(canonical string) string {
 	}
 	switch code {
 	case USD:
-		return n
+		return n[len(RoutingABA):]
 	case GBP:
 		return n[len(n)-8:]
 	case EUR:
@@ -78,7 +78,7 @@ func Format(canonical string) string {
 	}
 	switch code {
 	case USD:
-		return n[:4] + " · " + n[4:]
+		return n[:9] + " · " + n[9:13] + " " + n[13:]
 	case GBP:
 		return n[0:2] + "-" + n[2:4] + "-" + n[4:6] + " · " + n[6:10] + " " + n[10:]
 	case EUR:
@@ -112,6 +112,26 @@ func compact(s string) string {
 		b.WriteRune(unicode.ToUpper(r))
 	}
 	return b.String()
+}
+
+func isUSDACH(n string) bool {
+	return len(n) == 17 && strings.HasPrefix(n, RoutingABA) && validCore(n[9:])
+}
+
+// ValidABA reports whether n is a 9-digit ABA routing number with a valid checksum.
+func ValidABA(n string) bool {
+	if len(n) != 9 {
+		return false
+	}
+	var d [9]int
+	for i := 0; i < 9; i++ {
+		if n[i] < '0' || n[i] > '9' {
+			return false
+		}
+		d[i] = int(n[i] - '0')
+	}
+	sum := 3*(d[0]+d[3]+d[6]) + 7*(d[1]+d[4]+d[7]) + (d[2] + d[5] + d[8])
+	return sum%10 == 0
 }
 
 func validCore(s string) bool {

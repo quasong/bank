@@ -404,7 +404,7 @@ export function CurrencyChoices({
             <strong>
               {currencySymbol(ccy)} {currencyName(ccy)}
             </strong>
-            <em>{ccy === "EUR" ? "GB IBAN details" : ccy === "GBP" ? "UK sort code details" : "US account details"}</em>
+            <em>{ccy === "EUR" ? "GB IBAN details" : ccy === "GBP" ? "UK sort code details" : "US ACH details"}</em>
           </span>
         </button>
       ))}

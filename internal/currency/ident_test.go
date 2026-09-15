@@ -3,9 +3,12 @@ package currency
 import "testing"
 
 func TestIssueRoundTrip(t *testing.T) {
+	if !ValidABA(RoutingABA) {
+		t.Fatalf("routing %s failed ABA checksum", RoutingABA)
+	}
 	core := "12345678"
 	usd, err := Issue(USD, core)
-	if err != nil || usd != core {
+	if err != nil || usd != RoutingABA+core {
 		t.Fatalf("usd %q %v", usd, err)
 	}
 	gbp, err := Issue(GBP, core)
@@ -31,9 +34,15 @@ func TestNormalizeGBPAndUSD(t *testing.T) {
 	if !ok || code != GBP || n != "04000412345678" {
 		t.Fatalf("%q %s %v", n, code, ok)
 	}
-	n, code, ok = Normalize("1234 · 5678")
-	if !ok || code != USD || n != "12345678" {
+	n, code, ok = Normalize(RoutingABA + " · 1234 5678")
+	if !ok || code != USD || n != RoutingABA+"12345678" || Core(n) != "12345678" {
 		t.Fatalf("%q %s %v", n, code, ok)
+	}
+	if _, _, ok := Normalize("1234 · 5678"); ok {
+		t.Fatal("bare 8-digit USD should not be an account number")
+	}
+	if Format(RoutingABA+"12345678") != RoutingABA+" · 1234 5678" {
+		t.Fatalf("format %q", Format(RoutingABA+"12345678"))
 	}
 }
 

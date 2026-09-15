@@ -12,8 +12,12 @@ import (
 )
 
 func TestValidAccountNumber(t *testing.T) {
-	if !ValidAccountNumber("01234567") || ValidAccountNumber("TB012345") || ValidAccountNumber("1234567") || ValidAccountNumber("123456789") {
+	usd, err := currency.Issue(currency.USD, "01234567")
+	if err != nil || !ValidAccountNumber(usd) || !ValidAccountNumber(currency.Format(usd)) {
 		t.Fatal("usd format")
+	}
+	if ValidAccountNumber("01234567") || ValidAccountNumber("TB012345") || ValidAccountNumber("1234567") || ValidAccountNumber("123456789") {
+		t.Fatal("rejected formats")
 	}
 	gbp, err := currency.Issue(currency.GBP, "01234567")
 	if err != nil || !ValidAccountNumber(gbp) {

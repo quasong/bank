@@ -183,7 +183,7 @@ export function AccountsPage() {
                 <strong>{acct.details.sort_code}</strong>
               </button>
             ) : null}
-            {acct.details?.account && acct.currency !== "USD" ? (
+            {acct.details?.account ? (
               <button
                 type="button"
                 className="fact"

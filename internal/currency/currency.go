@@ -19,7 +19,7 @@ const (
 	SortCode         = "040004"
 	BankCode         = "THEB"
 	BIC              = "THEBGB2L"
-	RoutingABA       = "121174841"
+	RoutingABA       = "121000248"
 	CountryGB        = "GB"
 )
 
