@@ -62,6 +62,22 @@ func (m *MemStore) UpsertPayee(_ context.Context, customerID uuid.UUID, accountN
 	return p, nil
 }
 
+func (m *MemStore) RenamePayee(_ context.Context, customerID, id uuid.UUID, displayName string, provided bool) (Payee, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.payees[id]
+	if !ok || p.CustomerID != customerID {
+		return Payee{}, ErrNotFound
+	}
+	if provided {
+		p.DisplayName = displayName
+	} else {
+		p.DisplayName = p.AccountNumber
+	}
+	m.payees[id] = p
+	return p, nil
+}
+
 func (m *MemStore) DeletePayee(_ context.Context, customerID, id uuid.UUID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

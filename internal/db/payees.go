@@ -2,8 +2,10 @@ package db
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"bank/internal/payee"
 )
@@ -40,6 +42,24 @@ func (s *Store) UpsertPayee(ctx context.Context, customerID uuid.UUID, accountNu
 		RETURNING id, customer_id, account_number, display_name, created_at, last_used_at`,
 		uuid.New(), customerID, accountNumber, displayName, overwriteName,
 	).Scan(&p.ID, &p.CustomerID, &p.AccountNumber, &p.DisplayName, &p.CreatedAt, &p.LastUsedAt)
+	if err != nil {
+		return payee.Payee{}, err
+	}
+	return p, nil
+}
+
+func (s *Store) RenamePayee(ctx context.Context, customerID, id uuid.UUID, displayName string, provided bool) (payee.Payee, error) {
+	var p payee.Payee
+	err := s.pool.QueryRow(ctx, `
+		UPDATE payees
+		SET display_name = CASE WHEN $3 THEN $4 ELSE account_number END
+		WHERE id = $1 AND customer_id = $2
+		RETURNING id, customer_id, account_number, display_name, created_at, last_used_at`,
+		id, customerID, provided, displayName,
+	).Scan(&p.ID, &p.CustomerID, &p.AccountNumber, &p.DisplayName, &p.CreatedAt, &p.LastUsedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return payee.Payee{}, payee.ErrNotFound
+	}
 	if err != nil {
 		return payee.Payee{}, err
 	}

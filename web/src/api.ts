@@ -34,7 +34,8 @@ const FRIENDLY: Record<string, string> = {
   account_locked: "This profile is locked",
   account_exists: "You already have a USD account",
   own_account: "That's your own account",
-  payee_not_found: "Payee not found",
+  payee_not_found: "That person isn't saved",
+  account_not_found: "No account with that number",
 };
 
 export function errorMessage(err: unknown, fallback: string): string {
@@ -219,6 +220,29 @@ export function createTransfer(
 
 export function listPayees() {
   return request<{ payees: Payee[] }>("/api/v1/payees");
+}
+
+export function createPayee(accountNumber: string, displayName?: string) {
+  const body: Record<string, unknown> = { account_number: accountNumber };
+  const name = displayName?.trim();
+  if (name) {
+    body.display_name = name.slice(0, 40);
+  }
+  return request<{ payee: Payee }>("/api/v1/payees", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updatePayee(id: string, displayName: string) {
+  return request<{ payee: Payee }>(`/api/v1/payees/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ display_name: displayName.slice(0, 40) }),
+  });
+}
+
+export function deletePayee(id: string) {
+  return request<void>(`/api/v1/payees/${id}`, { method: "DELETE" });
 }
 
 export function listActivity(accountId: string) {

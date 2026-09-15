@@ -14,6 +14,7 @@ import (
 type Store interface {
 	ListPayees(ctx context.Context, customerID uuid.UUID) ([]Payee, error)
 	UpsertPayee(ctx context.Context, customerID uuid.UUID, accountNumber, displayName string, overwriteName bool) (Payee, error)
+	RenamePayee(ctx context.Context, customerID, id uuid.UUID, displayName string, provided bool) (Payee, error)
 	DeletePayee(ctx context.Context, customerID, id uuid.UUID) error
 }
 
@@ -84,6 +85,17 @@ func (s *Service) Upsert(ctx context.Context, customerID uuid.UUID, accountNumbe
 		name = accountNumber
 	}
 	return s.store.UpsertPayee(ctx, customerID, accountNumber, name, provided)
+}
+
+func (s *Service) Rename(ctx context.Context, customerID, id uuid.UUID, displayName string) (Payee, error) {
+	if customerID == uuid.Nil || id == uuid.Nil {
+		return Payee{}, ErrInvalidRequest
+	}
+	name, provided, err := normalizeName(displayName)
+	if err != nil {
+		return Payee{}, err
+	}
+	return s.store.RenamePayee(ctx, customerID, id, name, provided)
 }
 
 func (s *Service) Delete(ctx context.Context, customerID, id uuid.UUID) error {

@@ -1,17 +1,20 @@
-import { FormEvent, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { createTransfer, errorMessage } from "../api";
 import { digitsOnly, copyText, formatAccountNumber, formatUSD, maskAccountInput, payeeLabel, receiptCode, statusLabel } from "../format";
 import { centsToDollars, dollarsToCents } from "../money";
 import { useAccounts, usePayees, useToast } from "../hooks";
+import { SavePersonSheet } from "../people";
 import { AmountField, Banner, EmptyState, IconCheck, Page, PageSkeleton, Toast } from "../ui";
 
 export function TransfersPage() {
   const { accounts, error, setError, reload } = useAccounts();
   const { payees, reload: reloadPayees } = usePayees();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [toNumber, setToNumber] = useState("");
   const [payeeName, setPayeeName] = useState("");
   const [note, setNote] = useState("");
+  const [adding, setAdding] = useState(false);
   const [amount, setAmount] = useState("");
   const [step, setStep] = useState<"edit" | "confirm">("edit");
   const [pending, setPending] = useState(false);
@@ -37,6 +40,7 @@ export function TransfersPage() {
   const leftover =
     selected && cents != null && cents > 0 && cents <= selected.balance_cents ? selected.balance_cents - cents : null;
   const dest = payeeLabel(toNumber, payeeName) || formatAccountNumber(toNumber);
+  const alreadySaved = saved.some((p) => p.account_number === toNumber);
   const ready =
     !blocked &&
     cents != null &&
@@ -45,6 +49,16 @@ export function TransfersPage() {
     selected != null &&
     !ownAccount &&
     cents <= selected.balance_cents;
+
+  useEffect(() => {
+    const to = digitsOnly(searchParams.get("to") ?? "");
+    if (to.length !== 8) return;
+    setToNumber(to);
+    if (payees == null) return;
+    const match = payees.find((p) => p.account_number === to);
+    setPayeeName(match && match.display_name !== to ? match.display_name : "");
+    setSearchParams({}, { replace: true });
+  }, [searchParams, payees, setSearchParams]);
 
   function pickPayee(accountNumber: string, displayName: string) {
     setToNumber(accountNumber);
@@ -286,7 +300,7 @@ export function TransfersPage() {
             aria-label="Transfer note"
           />
         </label>
-        {saved.length > 0 ? (
+        {saved.length > 0 || !blocked ? (
           <div className="chips">
             {saved.map((p) => (
               <button
@@ -300,7 +314,17 @@ export function TransfersPage() {
                 <span>{formatAccountNumber(p.account_number)}</span>
               </button>
             ))}
+            <button type="button" className="chip" onClick={() => setAdding(true)}>
+              Add
+            </button>
           </div>
+        ) : null}
+        {toNumber.length === 8 && !ownAccount && !alreadySaved ? (
+          <p className="avail">
+            <button type="button" className="text-link" onClick={() => setAdding(true)}>
+              Save this person
+            </button>
+          </p>
         ) : null}
         <p className={`avail${ownAccount ? " avail-warn" : ""}`}>
           {ownAccount ? "That's your own account" : `${toNumber.length}/8 digits`}
@@ -309,6 +333,21 @@ export function TransfersPage() {
           {cents != null && cents > 0 ? `Continue · ${formatUSD(cents)}` : "Continue"}
         </button>
       </form>
+      {adding ? (
+        <SavePersonSheet
+          ownAccountNumber={selected?.account_number}
+          initialNumber={toNumber}
+          initialName={payeeName}
+          onClose={() => setAdding(false)}
+          onSaved={async (payee) => {
+            await reloadPayees();
+            pickPayee(payee.account_number, payee.display_name);
+            setAdding(false);
+            show("Saved");
+          }}
+        />
+      ) : null}
+      <Toast text={toast} />
     </Page>
   );
 }

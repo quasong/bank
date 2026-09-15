@@ -86,10 +86,11 @@ Deposits are ledger liabilities. Demo funding debits vault cash and credits the 
 | GET | `/api/v1/accounts/{id}/activity` | Journal lines; includes `receipt`, `note`, `counterparty_account_number`, `counterparty_name` |
 | GET | `/api/v1/payees` | Saved destinations, most recently used first |
 | POST | `/api/v1/payees` | Upsert `{account_number, display_name?}`. Destination must exist and not be yours |
+| PATCH | `/api/v1/payees/{id}` | Rename. Empty name resets to the account number |
 | DELETE | `/api/v1/payees/{id}` | Remove a saved destination |
 | GET | `/api/v1/audit` | Your security and money events |
 
-Replay the same idempotency key to receive the original journal without moving money twice. A successful transfer upserts a payee for the sender; a payee write failure does not fail the transfer. Optional `note` is stored on the journal (max 40 characters) and shown in activity.
+Replay the same idempotency key to receive the original journal without moving money twice. A successful transfer upserts a payee for the sender; a payee write failure does not fail the transfer. Optional `note` is stored on the journal (max 40 characters) and shown in activity. Saved people can be added, renamed, and removed without sending; a removed name no longer appears on new activity, and past journal lines stay unchanged.
 
 Activity `receipt` is the last 8 hex digits of `journal_id`. Copy the full `journal_id` if you need the canonical id. Funding and withdrawals have no counterparty.
 

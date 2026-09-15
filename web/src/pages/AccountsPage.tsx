@@ -4,6 +4,7 @@ import { closeAccount, errorMessage, freezeAccount, openAccount, unfreezeAccount
 import { auditAmount, auditLabel, copyText, formatAccountNumber, openedLabel, recentWhen } from "../format";
 import { useAccounts, useAudit, useToast } from "../hooks";
 import { MoneySheet } from "../moneyflow";
+import { PeoplePanel } from "../people";
 import { AccountHero, Banner, EmptyState, IconArrow, IconFreeze, IconMinus, IconPlus, Page, PageSkeleton, Sheet, Toast } from "../ui";
 
 type MoneyKind = "fund" | "withdraw";
@@ -149,6 +150,11 @@ export function AccountsPage() {
               <strong>{openedLabel(acct.opened_at)}</strong>
             </div>
           </section>
+          <PeoplePanel
+            ownAccountNumber={acct.account_number}
+            onToast={show}
+            onSendTo={(number) => navigate(`/transfers?to=${number}`)}
+          />
           {events && events.length > 0 ? (
             <section className="panel facts">
               <p className="day-label">Account log</p>

@@ -133,3 +133,32 @@ func TestDeleteAndList(t *testing.T) {
 		t.Fatalf("%+v %v", list, err)
 	}
 }
+
+func TestRenameAndResetName(t *testing.T) {
+	ctx := context.Background()
+	svc, _, _, aCust, _, _, to := testEnv(t)
+	p, err := svc.Upsert(ctx, aCust, to.AccountNumber, "Ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	used := p.LastUsedAt
+	renamed, err := svc.Rename(ctx, aCust, p.ID, "  Bob  ")
+	if err != nil || renamed.DisplayName != "Bob" || renamed.ID != p.ID {
+		t.Fatalf("%+v %v", renamed, err)
+	}
+	if renamed.LastUsedAt != used {
+		t.Fatalf("rename should not bump last used")
+	}
+	reset, err := svc.Rename(ctx, aCust, p.ID, "   ")
+	if err != nil || reset.DisplayName != to.AccountNumber {
+		t.Fatalf("%+v %v", reset, err)
+	}
+	_, err = svc.Rename(ctx, aCust, p.ID, strings.Repeat("n", MaxNameLen+1))
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("long name %v", err)
+	}
+	_, err = svc.Rename(ctx, aCust, uuid.New(), "Ada")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("got %v", err)
+	}
+}

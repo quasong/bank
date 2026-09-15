@@ -54,6 +54,7 @@ func New(authH *auth.Handler, accountH *account.Handler, transferH *transfer.Han
 			r.Post("/transfers", transferH.Create)
 			r.Get("/payees", payeeH.List)
 			r.Post("/payees", payeeH.Create)
+			r.Patch("/payees/{id}", payeeH.Rename)
 			r.Delete("/payees/{id}", payeeH.Delete)
 		})
 	})

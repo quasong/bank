@@ -74,6 +74,36 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"payee": toPayeeBody(p)})
 }
 
+type patchBody struct {
+	DisplayName string `json:"display_name"`
+}
+
+func (h *Handler) Rename(w http.ResponseWriter, r *http.Request) {
+	customerID, ok := auth.CustomerIDFrom(r.Context())
+	if !ok {
+		auth.WriteError(w, http.StatusUnauthorized, "unauthorized", "please sign in again")
+		return
+	}
+	id, err := uuid.Parse(strings.TrimSpace(chi.URLParam(r, "id")))
+	if err != nil {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid payee id")
+		return
+	}
+	var body patchBody
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+		return
+	}
+	p, err := h.svc.Rename(r.Context(), customerID, id, body.DisplayName)
+	if err != nil {
+		writePayeeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"payee": toPayeeBody(p)})
+}
+
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	customerID, ok := auth.CustomerIDFrom(r.Context())
 	if !ok {
