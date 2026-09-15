@@ -41,7 +41,16 @@ SELECT
     j.kind,
     j.description,
     jl.side,
-    jl.amount_cents
+    jl.amount_cents,
+    (
+        SELECT a.account_number
+        FROM journal_lines ojl
+        JOIN ledger_accounts ola ON ola.id = ojl.ledger_account_id
+        JOIN accounts a ON a.id = ola.account_id
+        WHERE ojl.journal_id = jl.journal_id
+          AND ojl.id <> jl.id
+        LIMIT 1
+    ) AS counterparty_account_number
 FROM journal_lines jl
 JOIN journals j ON j.id = jl.journal_id
 JOIN ledger_accounts la ON la.id = jl.ledger_account_id

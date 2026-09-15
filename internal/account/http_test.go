@@ -15,7 +15,7 @@ import (
 func TestFundRejectsFloatCents(t *testing.T) {
 	store := NewMemStore()
 	svc := NewService(store)
-	h := NewHandler(svc)
+	h := NewHandler(svc, nil)
 	cid := uuid.New()
 	acct, err := svc.Open(t.Context(), cid)
 	if err != nil {
@@ -41,7 +41,7 @@ func TestFundRejectsFloatCents(t *testing.T) {
 func TestWithdrawRejectsFloatCents(t *testing.T) {
 	store := NewMemStore()
 	svc := NewService(store)
-	h := NewHandler(svc)
+	h := NewHandler(svc, nil)
 	cid := uuid.New()
 	acct, err := svc.Open(t.Context(), cid)
 	if err != nil {

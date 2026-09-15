@@ -148,6 +148,16 @@ func (m *MemStore) Post(_ context.Context, journal ledger.Journal, deltas map[uu
 	for _, a := range m.accounts {
 		byLedger[a.LedgerID] = a.ID
 	}
+	journalAccounts := make([]uuid.UUID, 0, 2)
+	seen := make(map[uuid.UUID]bool)
+	for _, ln := range journal.Lines {
+		acctID, ok := byLedger[ln.LedgerAccountID]
+		if !ok || seen[acctID] {
+			continue
+		}
+		seen[acctID] = true
+		journalAccounts = append(journalAccounts, acctID)
+	}
 	for _, ln := range journal.Lines {
 		acctID, ok := byLedger[ln.LedgerAccountID]
 		if !ok {
@@ -157,14 +167,22 @@ func (m *MemStore) Post(_ context.Context, journal ledger.Journal, deltas map[uu
 		if ln.Side == ledger.Debit {
 			signed = -ln.AmountCents
 		}
+		counterparty := ""
+		for _, otherID := range journalAccounts {
+			if otherID != acctID {
+				counterparty = m.accounts[otherID].AccountNumber
+				break
+			}
+		}
 		m.activity[acctID] = append([]ledger.Entry{{
-			JournalID:   journal.ID,
-			CreatedAt:   journal.CreatedAt,
-			Kind:        journal.Kind,
-			Description: journal.Description,
-			Side:        ln.Side,
-			AmountCents: ln.AmountCents,
-			SignedCents: signed,
+			JournalID:          journal.ID,
+			CreatedAt:          journal.CreatedAt,
+			Kind:               journal.Kind,
+			Description:        journal.Description,
+			Side:               ln.Side,
+			AmountCents:        ln.AmountCents,
+			SignedCents:        signed,
+			CounterpartyNumber: counterparty,
 		}}, m.activity[acctID]...)
 	}
 	return journal, false, nil

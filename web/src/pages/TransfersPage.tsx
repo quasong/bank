@@ -1,30 +1,36 @@
 import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { createTransfer, errorMessage } from "../api";
-import { digitsOnly, formatAccountNumber, formatUSD, maskAccountInput, statusLabel } from "../format";
+import { digitsOnly, copyText, formatAccountNumber, formatUSD, maskAccountInput, payeeLabel, receiptCode, statusLabel } from "../format";
 import { centsToDollars, dollarsToCents } from "../money";
-import { useAccounts } from "../hooks";
-import { readRecentDests, rememberDest } from "../prefs";
-import { AmountField, Banner, EmptyState, IconCheck, Page, PageSkeleton } from "../ui";
+import { useAccounts, usePayees, useToast } from "../hooks";
+import { AmountField, Banner, EmptyState, IconCheck, Page, PageSkeleton, Toast } from "../ui";
 
 export function TransfersPage() {
   const { accounts, error, setError, reload } = useAccounts();
+  const { payees, reload: reloadPayees } = usePayees();
   const [toNumber, setToNumber] = useState("");
+  const [payeeName, setPayeeName] = useState("");
   const [amount, setAmount] = useState("");
   const [step, setStep] = useState<"edit" | "confirm">("edit");
   const [pending, setPending] = useState(false);
-  const [sent, setSent] = useState<{ amount: string; to: string; left: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const { text: toast, show } = useToast();
+  const [sent, setSent] = useState<{ amount: string; to: string; left: string; journalId: string; receipt: string } | null>(
+    null,
+  );
 
   const selected = accounts?.[0];
   const blocked = selected != null && selected.status !== "active";
-  const recents = useMemo(
-    () => readRecentDests().filter((n) => n !== selected?.account_number),
-    [selected?.account_number, sent],
+  const saved = useMemo(
+    () => (payees ?? []).filter((p) => p.account_number !== selected?.account_number),
+    [payees, selected?.account_number],
   );
   const cents = dollarsToCents(amount);
   const ownAccount = selected != null && toNumber === selected.account_number;
   const leftover =
     selected && cents != null && cents > 0 && cents <= selected.balance_cents ? selected.balance_cents - cents : null;
+  const dest = payeeLabel(toNumber, payeeName) || formatAccountNumber(toNumber);
   const ready =
     !blocked &&
     cents != null &&
@@ -33,6 +39,11 @@ export function TransfersPage() {
     selected != null &&
     !ownAccount &&
     cents <= selected.balance_cents;
+
+  function pickPayee(accountNumber: string, displayName: string) {
+    setToNumber(accountNumber);
+    setPayeeName(displayName === accountNumber ? "" : displayName);
+  }
 
   function validate(): string | null {
     if (cents == null || cents <= 0) return "Enter an amount with at most two decimals";
@@ -66,15 +77,18 @@ export function TransfersPage() {
     setError("");
     setPending(true);
     try {
-      const res = await createTransfer(selected.id, toNumber, cents, crypto.randomUUID());
+      const res = await createTransfer(selected.id, toNumber, cents, crypto.randomUUID(), payeeName);
       const next = await reload();
+      await reloadPayees().catch(() => undefined);
       const left = next[0]?.balance_cents ?? selected.balance_cents - cents;
       setSent({
         amount: formatUSD(cents),
-        to: formatAccountNumber(res.transfer.to_account_number),
+        to: payeeLabel(res.transfer.to_account_number, payeeName) || formatAccountNumber(res.transfer.to_account_number),
         left: formatUSD(left),
+        journalId: res.transfer.journal_id,
+        receipt: receiptCode(res.transfer.journal_id, res.transfer.receipt),
       });
-      rememberDest(res.transfer.to_account_number);
+      setCopied(false);
     } catch (err) {
       setError(errorMessage(err, "Transfer failed"));
       setStep("edit");
@@ -116,14 +130,33 @@ export function TransfersPage() {
             <br />
             {sent.left} left in your account
           </p>
+          <div className="review success-receipt">
+            <button
+              type="button"
+              className="review-copy"
+              onClick={() => {
+                void copyText(sent.journalId).then((ok) => {
+                  if (ok) {
+                    setCopied(true);
+                    show("Copied receipt");
+                  }
+                });
+              }}
+            >
+              <span>Receipt</span>
+              <strong>{copied ? "Copied" : sent.receipt}</strong>
+            </button>
+          </div>
           <button
             className="btn btn-primary btn-block"
             type="button"
             onClick={() => {
               setSent(null);
               setToNumber("");
+              setPayeeName("");
               setAmount("");
               setStep("edit");
+              setCopied(false);
             }}
           >
             Send again
@@ -132,6 +165,7 @@ export function TransfersPage() {
             Back home
           </Link>
         </div>
+        <Toast text={toast} />
       </Page>
     );
   }
@@ -148,8 +182,14 @@ export function TransfersPage() {
             </div>
             <div>
               <span>To</span>
-              <strong>{formatAccountNumber(toNumber)}</strong>
+              <strong>{dest}</strong>
             </div>
+            {toNumber.length === 8 && payeeName.trim() && payeeName.trim() !== toNumber ? (
+              <div>
+                <span>Account</span>
+                <strong>{formatAccountNumber(toNumber)}</strong>
+              </div>
+            ) : null}
             <div>
               <span>Remaining</span>
               <strong>{formatUSD(selected.balance_cents - cents)}</strong>
@@ -202,11 +242,30 @@ export function TransfersPage() {
             aria-label="Destination account number"
           />
         </label>
-        {recents.length > 0 ? (
+        <label>
+          Name
+          <input
+            value={payeeName}
+            onChange={(e) => setPayeeName(e.target.value.slice(0, 40))}
+            disabled={blocked}
+            maxLength={40}
+            placeholder="Optional"
+            autoComplete="off"
+            aria-label="Payee name"
+          />
+        </label>
+        {saved.length > 0 ? (
           <div className="chips">
-            {recents.map((n) => (
-              <button key={n} type="button" className="chip" disabled={blocked} onClick={() => setToNumber(n)}>
-                {formatAccountNumber(n)}
+            {saved.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={`chip chip-payee${toNumber === p.account_number ? " chip-on" : ""}`}
+                disabled={blocked}
+                onClick={() => pickPayee(p.account_number, p.display_name)}
+              >
+                {p.display_name !== p.account_number ? <strong>{p.display_name}</strong> : null}
+                <span>{formatAccountNumber(p.account_number)}</span>
               </button>
             ))}
           </div>

@@ -211,7 +211,16 @@ func (s *Store) Post(ctx context.Context, journal ledger.Journal, deltas map[uui
 
 func (s *Store) Activity(ctx context.Context, accountID uuid.UUID, limit, offset int32) ([]ledger.Entry, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT j.id, j.created_at, j.kind, j.description, jl.side, jl.amount_cents
+		SELECT j.id, j.created_at, j.kind, j.description, jl.side, jl.amount_cents,
+			(
+				SELECT a.account_number
+				FROM journal_lines ojl
+				JOIN ledger_accounts ola ON ola.id = ojl.ledger_account_id
+				JOIN accounts a ON a.id = ola.account_id
+				WHERE ojl.journal_id = jl.journal_id
+				  AND ojl.id <> jl.id
+				LIMIT 1
+			)
 		FROM journal_lines jl
 		JOIN journals j ON j.id = jl.journal_id
 		JOIN ledger_accounts la ON la.id = jl.ledger_account_id
@@ -225,8 +234,12 @@ func (s *Store) Activity(ctx context.Context, accountID uuid.UUID, limit, offset
 	var out []ledger.Entry
 	for rows.Next() {
 		var e ledger.Entry
-		if err := rows.Scan(&e.JournalID, &e.CreatedAt, &e.Kind, &e.Description, &e.Side, &e.AmountCents); err != nil {
+		var counterparty *string
+		if err := rows.Scan(&e.JournalID, &e.CreatedAt, &e.Kind, &e.Description, &e.Side, &e.AmountCents, &counterparty); err != nil {
 			return nil, err
+		}
+		if counterparty != nil {
+			e.CounterpartyNumber = *counterparty
 		}
 		if e.Side == ledger.Credit {
 			e.SignedCents = e.AmountCents

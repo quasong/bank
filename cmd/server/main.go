@@ -15,6 +15,7 @@ import (
 	"bank/internal/config"
 	"bank/internal/db"
 	"bank/internal/httpapi"
+	"bank/internal/payee"
 	"bank/internal/transfer"
 )
 
@@ -46,9 +47,11 @@ func run(log *slog.Logger) error {
 	authSvc := auth.NewService(store, auth.NewArgon2Hasher(), tokens, 7*24*time.Hour)
 	authH := auth.NewHandler(authSvc, cfg.CookieSecure)
 	accountSvc := account.NewService(store)
-	accountH := account.NewHandler(accountSvc)
-	transferH := transfer.NewHandler(transfer.NewService(store))
-	handler := httpapi.New(authH, accountH, transferH, cfg.WebDist, log)
+	payeeSvc := payee.NewService(store, store)
+	accountH := account.NewHandler(accountSvc, payeeSvc)
+	transferH := transfer.NewHandler(transfer.NewService(store), payeeSvc)
+	payeeH := payee.NewHandler(payeeSvc)
+	handler := httpapi.New(authH, accountH, transferH, payeeH, cfg.WebDist, log)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

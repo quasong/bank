@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 
 const HIDE_KEY = "tb.hide-balance";
 const EMAIL_KEY = "tb.last-email";
-const RECENTS_KEY = "tb.recent-dests";
 const PREFS_EVENT = "tb-prefs";
 
 function readHide(): boolean {
@@ -52,29 +51,6 @@ export function readLastEmail(): string {
 export function rememberEmail(email: string) {
   try {
     localStorage.setItem(EMAIL_KEY, email.trim());
-  } catch {
-    /* ignore quota */
-  }
-}
-
-export function readRecentDests(): string[] {
-  try {
-    const raw = localStorage.getItem(RECENTS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((n): n is string => typeof n === "string" && /^\d{8}$/.test(n)).slice(0, 5);
-  } catch {
-    return [];
-  }
-}
-
-export function rememberDest(accountNumber: string) {
-  const digits = accountNumber.replace(/\D/g, "").slice(0, 8);
-  if (digits.length !== 8) return;
-  const next = [digits, ...readRecentDests().filter((n) => n !== digits)].slice(0, 5);
-  try {
-    localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
   } catch {
     /* ignore quota */
   }

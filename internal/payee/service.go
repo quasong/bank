@@ -1,0 +1,105 @@
+package payee
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+
+	"bank/internal/account"
+)
+
+type Store interface {
+	ListPayees(ctx context.Context, customerID uuid.UUID) ([]Payee, error)
+	UpsertPayee(ctx context.Context, customerID uuid.UUID, accountNumber, displayName string, overwriteName bool) (Payee, error)
+	DeletePayee(ctx context.Context, customerID, id uuid.UUID) error
+}
+
+type Directory interface {
+	GetByCustomer(ctx context.Context, customerID uuid.UUID) (account.Account, error)
+	GetByNumber(ctx context.Context, number string) (account.Account, error)
+}
+
+type Service struct {
+	store    Store
+	accounts Directory
+}
+
+func NewService(store Store, accounts Directory) *Service {
+	return &Service{store: store, accounts: accounts}
+}
+
+func (s *Service) List(ctx context.Context, customerID uuid.UUID) ([]Payee, error) {
+	if customerID == uuid.Nil {
+		return nil, ErrInvalidRequest
+	}
+	out, err := s.store.ListPayees(ctx, customerID)
+	if err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []Payee{}
+	}
+	return out, nil
+}
+
+func (s *Service) Names(ctx context.Context, customerID uuid.UUID) (map[string]string, error) {
+	list, err := s.List(ctx, customerID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(list))
+	for _, p := range list {
+		out[p.AccountNumber] = p.DisplayName
+	}
+	return out, nil
+}
+
+func (s *Service) Upsert(ctx context.Context, customerID uuid.UUID, accountNumber, displayName string) (Payee, error) {
+	if customerID == uuid.Nil {
+		return Payee{}, ErrInvalidRequest
+	}
+	accountNumber = strings.TrimSpace(accountNumber)
+	if !account.ValidAccountNumber(accountNumber) {
+		return Payee{}, ErrInvalidRequest
+	}
+	dest, err := s.accounts.GetByNumber(ctx, accountNumber)
+	if err != nil {
+		return Payee{}, err
+	}
+	own, err := s.accounts.GetByCustomer(ctx, customerID)
+	if err != nil && !errors.Is(err, account.ErrNotFound) {
+		return Payee{}, err
+	}
+	if err == nil && own.ID == dest.ID {
+		return Payee{}, ErrOwnAccount
+	}
+	name, provided, err := normalizeName(displayName)
+	if err != nil {
+		return Payee{}, err
+	}
+	if !provided {
+		name = accountNumber
+	}
+	return s.store.UpsertPayee(ctx, customerID, accountNumber, name, provided)
+}
+
+func (s *Service) Delete(ctx context.Context, customerID, id uuid.UUID) error {
+	if customerID == uuid.Nil || id == uuid.Nil {
+		return ErrInvalidRequest
+	}
+	return s.store.DeletePayee(ctx, customerID, id)
+}
+
+func normalizeName(s string) (string, bool, error) {
+	s = strings.Join(strings.Fields(s), " ")
+	if s == "" {
+		return "", false, nil
+	}
+	if utf8.RuneCountInString(s) > MaxNameLen {
+		return "", false, ErrInvalidRequest
+	}
+	return s, true, nil
+}

@@ -512,6 +512,37 @@ a.btn {
   border-color: var(--ink);
 }
 
+.chip-payee {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  border-radius: 14px;
+  padding: 7px 12px;
+  line-height: 1.15;
+}
+
+.chip-payee strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.chip-payee span {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.chip-payee.chip-on span {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.chip-payee:not(:has(strong)) span {
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+}
+
 .chip:disabled {
   opacity: 0.45;
 }
@@ -1123,6 +1154,40 @@ button.fact {
   font-size: 16px;
   letter-spacing: -0.03em;
   flex-shrink: 0;
+}
+
+.review-copy {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: baseline;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.review-copy span {
+  color: var(--muted);
+  font-size: 14px;
+  min-width: 0;
+}
+
+.review-copy strong {
+  font-size: 16px;
+  letter-spacing: -0.03em;
+  flex-shrink: 0;
+}
+
+.success-receipt {
+  text-align: left;
+  margin: 0 0 20px;
 }
 
 .skel {

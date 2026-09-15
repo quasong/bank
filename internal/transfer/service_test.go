@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"bank/internal/account"
+	"bank/internal/ledger"
 )
 
 func TestTransferMovesBalancesAndIsIdempotent(t *testing.T) {
@@ -44,6 +45,28 @@ func TestTransferMovesBalancesAndIsIdempotent(t *testing.T) {
 	}
 	if replay.From.BalanceCents != 600 {
 		t.Fatalf("double pay: %d", replay.From.BalanceCents)
+	}
+
+	fromItems, err := accounts.Activity(ctx, aCust, from.ID, 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var xferEntry ledger.Entry
+	for _, e := range fromItems {
+		if e.Kind == ledger.KindTransfer {
+			xferEntry = e
+			break
+		}
+	}
+	if xferEntry.CounterpartyNumber != to.AccountNumber || xferEntry.SignedCents != -400 {
+		t.Fatalf("from activity %+v", fromItems)
+	}
+	toItems, err := accounts.Activity(ctx, bCust, to.ID, 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(toItems) != 1 || toItems[0].CounterpartyNumber != from.AccountNumber || toItems[0].SignedCents != 400 {
+		t.Fatalf("to activity %+v", toItems)
 	}
 }
 

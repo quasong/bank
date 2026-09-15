@@ -18,11 +18,17 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc   *Service
+	names PayeeNames
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+// PayeeNames attaches saved payee display names onto activity items.
+type PayeeNames interface {
+	Names(ctx context.Context, customerID uuid.UUID) (map[string]string, error)
+}
+
+func NewHandler(svc *Service, names PayeeNames) *Handler {
+	return &Handler{svc: svc, names: names}
 }
 
 type accountBody struct {
@@ -199,17 +205,29 @@ func (h *Handler) Activity(w http.ResponseWriter, r *http.Request) {
 		writeAccountError(w, err)
 		return
 	}
+	var names map[string]string
+	if h.names != nil {
+		names, _ = h.names.Names(r.Context(), customerID)
+	}
 	out := make([]map[string]any, 0, len(items))
 	for _, e := range items {
-		out = append(out, map[string]any{
+		item := map[string]any{
 			"journal_id":   e.JournalID.String(),
+			"receipt":      ledger.ReceiptCode(e.JournalID),
 			"created_at":   e.CreatedAt.UTC().Format(time.RFC3339),
 			"kind":         string(e.Kind),
 			"description":  e.Description,
 			"side":         string(e.Side),
 			"amount_cents": e.AmountCents,
 			"signed_cents": e.SignedCents,
-		})
+		}
+		if e.CounterpartyNumber != "" {
+			item["counterparty_account_number"] = e.CounterpartyNumber
+			if name := names[e.CounterpartyNumber]; name != "" {
+				item["counterparty_name"] = name
+			}
+		}
+		out = append(out, item)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": out})
 }

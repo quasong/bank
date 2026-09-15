@@ -47,11 +47,47 @@ export function maskAccountInput(digits: string): string {
   return `${d.slice(0, 4)} · ${d.slice(4)}`;
 }
 
-export function activityHint(kind: string, signedCents = 0): string {
+export function activityHint(
+  kind: string,
+  signedCents = 0,
+  counterpartyNumber?: string,
+  counterpartyName?: string,
+): string {
   if (kind === "funding") return "Added instantly";
   if (kind === "withdrawal") return "Cashed out";
-  if (kind === "transfer") return signedCents >= 0 ? "From another account" : "To another account";
+  if (kind === "transfer") {
+    const who = payeeLabel(counterpartyNumber, counterpartyName);
+    if (signedCents >= 0) return who ? `From ${who}` : "From another account";
+    return who ? `To ${who}` : "To another account";
+  }
   return "Payment";
+}
+
+export function activityKindLabel(kind: string, signedCents = 0): string {
+  if (kind === "funding") return "Added instantly";
+  if (kind === "withdrawal") return "Cashed out";
+  if (kind === "transfer") return signedCents >= 0 ? "Incoming" : "Outgoing";
+  return "Payment";
+}
+
+export function payeeLabel(number?: string, name?: string): string {
+  if (!number) return "";
+  const n = (name ?? "").trim();
+  if (n && n !== number) return n;
+  return formatAccountNumber(number);
+}
+
+export function payeeDetail(number?: string, name?: string): string {
+  if (!number) return "";
+  const formatted = formatAccountNumber(number);
+  const n = (name ?? "").trim();
+  if (n && n !== number) return `${n} · ${formatted}`;
+  return formatted;
+}
+
+export function receiptCode(journalId: string, receipt?: string): string {
+  if (receipt) return receipt;
+  return journalId.replace(/-/g, "").toUpperCase().slice(-8);
 }
 
 export function sanitizeAmount(raw: string): string {

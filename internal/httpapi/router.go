@@ -14,10 +14,11 @@ import (
 
 	"bank/internal/account"
 	"bank/internal/auth"
+	"bank/internal/payee"
 	"bank/internal/transfer"
 )
 
-func New(authH *auth.Handler, accountH *account.Handler, transferH *transfer.Handler, webDist string, log *slog.Logger) http.Handler {
+func New(authH *auth.Handler, accountH *account.Handler, transferH *transfer.Handler, payeeH *payee.Handler, webDist string, log *slog.Logger) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -50,6 +51,9 @@ func New(authH *auth.Handler, accountH *account.Handler, transferH *transfer.Han
 			r.Post("/accounts/{id}/close", accountH.Close)
 			r.Get("/accounts/{id}/activity", accountH.Activity)
 			r.Post("/transfers", transferH.Create)
+			r.Get("/payees", payeeH.List)
+			r.Post("/payees", payeeH.Create)
+			r.Delete("/payees/{id}", payeeH.Delete)
 		})
 	})
 

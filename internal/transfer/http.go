@@ -1,6 +1,7 @@
 package transfer
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -9,15 +10,22 @@ import (
 
 	"bank/internal/account"
 	"bank/internal/auth"
+	"bank/internal/ledger"
 	"bank/internal/moneyjson"
+	"bank/internal/payee"
 )
 
 type Handler struct {
-	svc *Service
+	svc    *Service
+	payees PayeeBook
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+type PayeeBook interface {
+	Upsert(ctx context.Context, customerID uuid.UUID, accountNumber, displayName string) (payee.Payee, error)
+}
+
+func NewHandler(svc *Service, payees PayeeBook) *Handler {
+	return &Handler{svc: svc, payees: payees}
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
@@ -52,10 +60,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key, _ := moneyjson.String(raw["idempotency_key"])
+	payeeName, _ := moneyjson.String(raw["payee_name"])
 	res, err := h.svc.Execute(r.Context(), customerID, fromID, toNumber, amount, key)
 	if err != nil {
 		account.WriteHTTPError(w, err)
 		return
+	}
+	if h.payees != nil {
+		_, _ = h.payees.Upsert(r.Context(), customerID, res.To.AccountNumber, payeeName)
 	}
 	status := http.StatusCreated
 	if res.Idempotent {
@@ -68,6 +80,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, map[string]any{
 		"transfer": map[string]any{
 			"journal_id":          res.Journal.ID.String(),
+			"receipt":             ledger.ReceiptCode(res.Journal.ID),
 			"kind":                string(res.Journal.Kind),
 			"description":         res.Journal.Description,
 			"amount_cents":        res.AmountCents,

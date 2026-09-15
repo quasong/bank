@@ -47,11 +47,12 @@ type Journal struct {
 }
 
 type Entry struct {
-	JournalID   uuid.UUID
-	CreatedAt   time.Time
-	Kind        Kind
-	Description string
-	Side        Side
-	AmountCents int64
-	SignedCents int64
+	JournalID          uuid.UUID
+	CreatedAt          time.Time
+	Kind               Kind
+	Description        string
+	Side               Side
+	AmountCents        int64
+	SignedCents        int64
+	CounterpartyNumber string
 }

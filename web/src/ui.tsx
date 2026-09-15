@@ -2,11 +2,14 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ActivityItem, BankAccount } from "./api";
 import {
   activityHint,
+  activityKindLabel,
   activityTitle,
   copyText,
   dateTimeLabel,
   formatAccountNumber,
   formatUSD,
+  payeeDetail,
+  receiptCode,
   recentWhen,
   sanitizeAmount,
   statusLabel,
@@ -360,7 +363,8 @@ export function TxnRow({ item, onOpen }: { item: ActivityItem; onOpen?: (item: A
       <div className="txn-copy">
         <strong>{activityTitle(item.kind, item.signed_cents)}</strong>
         <span>
-          {activityHint(item.kind, item.signed_cents)} · {recentWhen(item.created_at)}
+          {activityHint(item.kind, item.signed_cents, item.counterparty_account_number, item.counterparty_name)} ·{" "}
+          {recentWhen(item.created_at)}
         </span>
       </div>
       <MoneyText cents={item.signed_cents} signed />
@@ -377,6 +381,17 @@ export function TxnRow({ item, onOpen }: { item: ActivityItem; onOpen?: (item: A
 }
 
 export function TxnDetail({ item, onClose }: { item: ActivityItem; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const receipt = receiptCode(item.journal_id, item.receipt);
+  const counterparty = payeeDetail(item.counterparty_account_number, item.counterparty_name);
+
+  async function copyReceipt() {
+    const ok = await copyText(item.journal_id);
+    if (!ok) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+
   return (
     <Sheet title={activityTitle(item.kind, item.signed_cents)} onClose={onClose}>
       <p className="detail-amt">
@@ -389,8 +404,18 @@ export function TxnDetail({ item, onClose }: { item: ActivityItem; onClose: () =
         </div>
         <div>
           <span>Type</span>
-          <strong>{activityHint(item.kind, item.signed_cents)}</strong>
+          <strong>{activityKindLabel(item.kind, item.signed_cents)}</strong>
         </div>
+        {counterparty ? (
+          <div>
+            <span>{item.signed_cents >= 0 ? "From" : "To"}</span>
+            <strong>{counterparty}</strong>
+          </div>
+        ) : null}
+        <button type="button" className="review-copy" onClick={() => void copyReceipt()}>
+          <span>Receipt</span>
+          <strong>{copied ? "Copied" : receipt}</strong>
+        </button>
       </div>
     </Sheet>
   );

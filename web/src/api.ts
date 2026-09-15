@@ -33,6 +33,8 @@ const FRIENDLY: Record<string, string> = {
   rate_limited: "Too many attempts. Try again in a moment",
   account_locked: "This profile is locked",
   account_exists: "You already have a USD account",
+  own_account: "That's your own account",
+  payee_not_found: "Payee not found",
 };
 
 export function errorMessage(err: unknown, fallback: string): string {
@@ -117,12 +119,23 @@ export type BankAccount = {
 
 export type ActivityItem = {
   journal_id: string;
+  receipt?: string;
   created_at: string;
   kind: string;
   description: string;
   side: string;
   amount_cents: number;
   signed_cents: number;
+  counterparty_account_number?: string;
+  counterparty_name?: string;
+};
+
+export type Payee = {
+  id: string;
+  account_number: string;
+  display_name: string;
+  created_at: string;
+  last_used_at: string;
 };
 
 export function listAccounts() {
@@ -159,19 +172,39 @@ export function closeAccount(id: string) {
   return request<{ account: BankAccount }>(`/api/v1/accounts/${id}/close`, { method: "POST" });
 }
 
-export function createTransfer(fromAccountId: string, toAccountNumber: string, amountCents: number, idempotencyKey: string) {
-  return request<{ transfer: { replay: boolean; from_balance_cents: number; to_account_number: string } }>(
-    "/api/v1/transfers",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        from_account_id: fromAccountId,
-        to_account_number: toAccountNumber,
-        amount_cents: amountCents,
-        idempotency_key: idempotencyKey,
-      }),
-    },
-  );
+export function createTransfer(
+  fromAccountId: string,
+  toAccountNumber: string,
+  amountCents: number,
+  idempotencyKey: string,
+  payeeName?: string,
+) {
+  const body: Record<string, unknown> = {
+    from_account_id: fromAccountId,
+    to_account_number: toAccountNumber,
+    amount_cents: amountCents,
+    idempotency_key: idempotencyKey,
+  };
+  const name = payeeName?.trim();
+  if (name) {
+    body.payee_name = name.slice(0, 40);
+  }
+  return request<{
+    transfer: {
+      journal_id: string;
+      receipt: string;
+      replay: boolean;
+      from_balance_cents: number;
+      to_account_number: string;
+    };
+  }>("/api/v1/transfers", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listPayees() {
+  return request<{ payees: Payee[] }>("/api/v1/payees");
 }
 
 export function listActivity(accountId: string) {

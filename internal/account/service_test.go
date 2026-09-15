@@ -83,6 +83,9 @@ func TestActivityFromJournal(t *testing.T) {
 	if err != nil || len(items) != 1 || items[0].SignedCents != 100 {
 		t.Fatalf("%+v %v", items, err)
 	}
+	if items[0].CounterpartyNumber != "" {
+		t.Fatalf("funding should have no counterparty: %+v", items[0])
+	}
 }
 
 func TestWithdrawAndIdempotentReplay(t *testing.T) {

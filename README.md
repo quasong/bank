@@ -20,6 +20,7 @@ internal/audit      audit action names
 internal/account    demand-deposit accounts and funding
 internal/ledger     journal validation and types
 internal/transfer   customer-to-customer transfers
+internal/payee      saved destinations
 internal/httpapi    router and middleware
 web                 React console
 ```
@@ -81,10 +82,15 @@ Deposits are ledger liabilities. Demo funding debits vault cash and credits the 
 | POST | `/api/v1/accounts/{id}/freeze` | Stop funding, withdrawals, and transfers |
 | POST | `/api/v1/accounts/{id}/unfreeze` | Return a frozen account to active |
 | POST | `/api/v1/accounts/{id}/close` | Close when `balance_cents` is 0; terminal |
-| POST | `/api/v1/transfers` | `{from_account_id, to_account_number, amount_cents, idempotency_key}` |
-| GET | `/api/v1/accounts/{id}/activity` | Journal lines for that account |
+| POST | `/api/v1/transfers` | `{from_account_id, to_account_number, amount_cents, idempotency_key, payee_name?}` |
+| GET | `/api/v1/accounts/{id}/activity` | Journal lines; includes `receipt`, `counterparty_account_number`, `counterparty_name` |
+| GET | `/api/v1/payees` | Saved destinations, most recently used first |
+| POST | `/api/v1/payees` | Upsert `{account_number, display_name?}`. Destination must exist and not be yours |
+| DELETE | `/api/v1/payees/{id}` | Remove a saved destination |
 
-Replay the same idempotency key to receive the original journal without moving money twice.
+Replay the same idempotency key to receive the original journal without moving money twice. A successful transfer upserts a payee for the sender; a payee write failure does not fail the transfer.
+
+Activity `receipt` is the last 8 hex digits of `journal_id`. Copy the full `journal_id` if you need the canonical id. Funding and withdrawals have no counterparty.
 
 ```bash
 curl -s -X POST http://127.0.0.1:8080/api/v1/auth/register \
