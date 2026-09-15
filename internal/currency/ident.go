@@ -43,6 +43,9 @@ func Normalize(raw string) (string, Code, bool) {
 	if n == "" {
 		return "", "", false
 	}
+	if looksLikeUSDAccount(n) {
+		return RoutingABA + n, USD, true
+	}
 	if code, ok := Detect(n); ok {
 		if code == EUR && !validIBAN(n) {
 			return "", "", false
@@ -116,6 +119,10 @@ func compact(s string) string {
 
 func isUSDACH(n string) bool {
 	return len(n) == 17 && strings.HasPrefix(n, RoutingABA) && validCore(n[9:])
+}
+
+func looksLikeUSDAccount(n string) bool {
+	return validCore(n) && !strings.HasPrefix(RoutingABA, n)
 }
 
 // ValidABA reports whether n is a 9-digit ABA routing number with a valid checksum.

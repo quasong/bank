@@ -6,6 +6,7 @@ import {
   activityTitle,
   copyText,
   currencyName,
+  currencyShortName,
   dateTimeLabel,
   formatAccountNumber,
   formatMoney,
@@ -118,6 +119,76 @@ export function IconSwap() {
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M7 7h11M15 4l3 3-3 3M17 17H6M9 14l-3 3 3 3" />
     </svg>
+  );
+}
+
+export function IconChevron() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 10l5 5 5-5" />
+    </svg>
+  );
+}
+
+function FlagUS() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect width="24" height="24" fill="#b31942" />
+      <rect y="1.85" width="24" height="1.85" fill="#fff" />
+      <rect y="5.54" width="24" height="1.85" fill="#fff" />
+      <rect y="9.23" width="24" height="1.85" fill="#fff" />
+      <rect y="12.92" width="24" height="1.85" fill="#fff" />
+      <rect y="16.62" width="24" height="1.85" fill="#fff" />
+      <rect y="20.31" width="24" height="1.85" fill="#fff" />
+      <rect width="11" height="12.92" fill="#0a3161" />
+      <circle cx="2.4" cy="2.6" r="0.55" fill="#fff" />
+      <circle cx="5.5" cy="2.6" r="0.55" fill="#fff" />
+      <circle cx="8.6" cy="2.6" r="0.55" fill="#fff" />
+      <circle cx="3.95" cy="4.7" r="0.55" fill="#fff" />
+      <circle cx="7.05" cy="4.7" r="0.55" fill="#fff" />
+      <circle cx="2.4" cy="6.8" r="0.55" fill="#fff" />
+      <circle cx="5.5" cy="6.8" r="0.55" fill="#fff" />
+      <circle cx="8.6" cy="6.8" r="0.55" fill="#fff" />
+      <circle cx="3.95" cy="8.9" r="0.55" fill="#fff" />
+      <circle cx="7.05" cy="8.9" r="0.55" fill="#fff" />
+      <circle cx="2.4" cy="11" r="0.55" fill="#fff" />
+      <circle cx="5.5" cy="11" r="0.55" fill="#fff" />
+      <circle cx="8.6" cy="11" r="0.55" fill="#fff" />
+    </svg>
+  );
+}
+
+function FlagEU() {
+  const stars = Array.from({ length: 12 }, (_, i) => {
+    const a = ((i * 30 - 90) * Math.PI) / 180;
+    return <circle key={i} cx={12 + Math.cos(a) * 6.4} cy={12 + Math.sin(a) * 6.4} r="1.05" fill="#ffcc00" />;
+  });
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect width="24" height="24" fill="#003399" />
+      {stars}
+    </svg>
+  );
+}
+
+function FlagUK() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect width="24" height="24" fill="#012169" />
+      <path d="M0 0 24 24M24 0 0 24" stroke="#fff" strokeWidth="5.2" />
+      <path d="M0 0 24 24M24 0 0 24" stroke="#c8102e" strokeWidth="2.4" />
+      <path d="M12 0v24M0 12h24" stroke="#fff" strokeWidth="7.2" />
+      <path d="M12 0v24M0 12h24" stroke="#c8102e" strokeWidth="4.2" />
+    </svg>
+  );
+}
+
+export function CurrencyFlag({ code }: { code: string }) {
+  const flag = code === "EUR" ? <FlagEU /> : code === "GBP" ? <FlagUK /> : <FlagUS />;
+  return (
+    <span className={`ccy-flag ccy-flag-${code}`} aria-hidden="true">
+      {flag}
+    </span>
   );
 }
 
@@ -356,9 +427,9 @@ export function Wallets({
           onClick={() => onSelect(a.id)}
         >
           <span className="wallet-id">
-            <i className="ccy-dot" aria-hidden="true" />
+            <CurrencyFlag code={a.currency} />
             <span>
-              <strong>{currencyName(a.currency)}</strong>
+              <strong>{currencyShortName(a.currency)}</strong>
               <em>{a.currency}</em>
             </span>
           </span>
@@ -399,7 +470,7 @@ export function CurrencyChoices({
           disabled={pending}
           onClick={() => onPick(ccy)}
         >
-          <i className="ccy-dot" aria-hidden="true" />
+          <CurrencyFlag code={ccy} />
           <span>
             <strong>
               {currencySymbol(ccy)} {currencyName(ccy)}
@@ -408,6 +479,99 @@ export function CurrencyChoices({
           </span>
         </button>
       ))}
+    </div>
+  );
+}
+
+export function ChoiceMenu({
+  label,
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; code: string; name: string; amount: string }[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const current = options.find((o) => o.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+
+  return (
+    <div
+      className={`choice${open ? " is-open" : ""}`}
+      ref={rootRef}
+      onBlur={(e) => {
+        if (!rootRef.current?.contains(e.relatedTarget as Node)) setOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        className={`choice-btn ccy-${current?.code ?? ""}`}
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <CurrencyFlag code={current?.code ?? "USD"} />
+        {current?.code ?? value}
+        <span className="choice-caret" aria-hidden="true">
+          <IconChevron />
+        </span>
+      </button>
+      {open ? (
+        <ul className="choice-menu" role="listbox" aria-label={label}>
+          {options.map((o) => {
+            const on = o.value === value;
+            return (
+              <li key={o.value}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={on}
+                  className={`choice-opt ccy-${o.code}${on ? " on" : ""}`}
+                  onClick={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
+                >
+                  <CurrencyFlag code={o.code} />
+                  <span className="choice-copy">
+                    <strong>{o.name}</strong>
+                    <em>{o.code}</em>
+                  </span>
+                  <b>{o.amount}</b>
+                  <span className={`choice-check${on ? " is-on" : ""}`}>{on ? <IconCheck /> : null}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
     </div>
   );
 }

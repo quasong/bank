@@ -38,8 +38,9 @@ func TestNormalizeGBPAndUSD(t *testing.T) {
 	if !ok || code != USD || n != RoutingABA+"12345678" || Core(n) != "12345678" {
 		t.Fatalf("%q %s %v", n, code, ok)
 	}
-	if _, _, ok := Normalize("1234 · 5678"); ok {
-		t.Fatal("bare 8-digit USD should not be an account number")
+	n, code, ok = Normalize("1234 · 5678")
+	if !ok || code != USD || n != RoutingABA+"12345678" {
+		t.Fatalf("dda %q %s %v", n, code, ok)
 	}
 	if Format(RoutingABA+"12345678") != RoutingABA+" · 1234 5678" {
 		t.Fatalf("format %q", Format(RoutingABA+"12345678"))

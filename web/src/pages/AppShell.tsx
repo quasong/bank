@@ -39,19 +39,17 @@ export function AppShell() {
           </div>
         </div>
         <nav>{navItems()}</nav>
-        <div className="sidebar-foot">
-          <span className="who">{customer?.email}</span>
-          <button type="button" className="btn btn-quiet" onClick={onLogout}>
-            Sign out
-          </button>
-        </div>
       </aside>
       <div className="main">
-        <header className="mobile-head">
-          <span className="who">{customer?.email}</span>
-          <button type="button" className="btn btn-quiet" onClick={onLogout}>
-            Sign out
-          </button>
+        <header className="app-head">
+          <div className="app-head-inner">
+            <span className="who" title={customer?.email}>
+              {customer?.email}
+            </span>
+            <button type="button" className="sign-out" onClick={onLogout}>
+              Sign out
+            </button>
+          </div>
         </header>
         <section className="content">
           <Outlet />

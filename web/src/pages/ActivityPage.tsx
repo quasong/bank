@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ActivityItem } from "../api";
-import { dayLabel } from "../format";
+import { currencyName, dayLabel } from "../format";
 import { useAccounts, useActivity, useSelectedAccount } from "../hooks";
 import { Banner, EmptyState, Page, PageSkeleton, TxnDetail, TxnRow, TxnSkeleton, Wallets } from "../ui";
 
@@ -53,7 +53,7 @@ export function ActivityPage() {
   }
 
   return (
-    <Page title="Activity" kicker={selected.currency}>
+    <Page title="Activity" kicker={currencyName(selected.currency)}>
       {error ? <Banner>{error}</Banner> : null}
       <Wallets accounts={accounts} selectedId={selected.id} onSelect={select} />
       {items == null ? (

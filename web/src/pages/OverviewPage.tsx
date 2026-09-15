@@ -83,6 +83,12 @@ export function OverviewPage() {
         />
       ) : selected ? (
         <>
+          <Wallets
+            accounts={accounts}
+            selectedId={selected.id}
+            onSelect={select}
+            onAdd={missing.length > 0 ? () => setAdding(true) : undefined}
+          />
           <AccountHero account={selected} onCopied={() => show("Copied")} />
           {!canMove ? (
             <Banner>
@@ -90,12 +96,6 @@ export function OverviewPage() {
               <Link to="/accounts">{selected.status === "frozen" ? "Unfreeze it" : "See details"}</Link> to move money.
             </Banner>
           ) : null}
-          <Wallets
-            accounts={accounts}
-            selectedId={selected.id}
-            onSelect={select}
-            onAdd={missing.length > 0 ? () => setAdding(true) : undefined}
-          />
           <div className="quicks">
             {canMove ? (
               <Link className="quick" to="/transfers">
@@ -142,7 +142,7 @@ export function OverviewPage() {
           </div>
           <section className="panel">
             <div className="panel-h">
-              <h2>{selected.currency} activity</h2>
+              <h2>Recent</h2>
               <Link to="/activity">See all</Link>
             </div>
             {items == null ? (

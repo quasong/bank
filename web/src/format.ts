@@ -32,14 +32,29 @@ export function currencyName(ccy = "USD"): string {
   return "US dollar";
 }
 
-export function shortAccountLabel(n: string, ccy?: string): string {
+export function currencyShortName(ccy = "USD"): string {
+  if (ccy === "EUR") return "Euro";
+  if (ccy === "GBP") return "Pound";
+  return "Dollar";
+}
+
+export function formatLocalAccount(n: string): string {
+  const d = compactAccountInput(n).replace(/\D/g, "").slice(-8);
+  if (d.length !== 8) return n;
+  return `${d.slice(0, 4)} ${d.slice(4)}`;
+}
+
+export function shortAccountLabel(n: string, _ccy?: string): string {
   const compact = compactAccountInput(n);
-  if (ccy === "EUR" || compact.startsWith("GB")) return `IBAN · ${compact.slice(-4)}`;
-  if (ccy === "GBP" || compact.length === 14) {
-    return `${compact.slice(0, 2)}-${compact.slice(2, 4)}-${compact.slice(4, 6)} · ${compact.slice(-4)}`;
-  }
-  if (ccy === "USD" || compact.startsWith(USD_ROUTING) || compact.length === 17) {
-    return `ACH · ${compact.slice(-4)}`;
+  return compact.slice(-4) || compact;
+}
+
+export function payeeAccountHint(n: string): string {
+  const compact = compactAccountInput(n);
+  if (compact.startsWith("GB") || compact.length === 22) return `IBAN · ${compact.slice(-4)}`;
+  if (compact.startsWith("040004")) return `04-00-04 · ${compact.slice(-4)}`;
+  if (compact.startsWith(USD_ROUTING) || compact.length === 17 || /^\d{8}$/.test(compact)) {
+    return formatLocalAccount(compact);
   }
   return formatAccountNumber(n);
 }
@@ -56,7 +71,8 @@ export function compactAccountInput(raw: string, max = 22): string {
 
 export function accountLooksReady(n: string): boolean {
   const c = compactAccountInput(n);
-  return new RegExp(`^${USD_ROUTING}\\d{8}$`).test(c) || /^040004\d{8}$/.test(c) || /^GB\d{2}THEB040004\d{8}$/.test(c);
+  const dda = /^\d{8}$/.test(c) && !USD_ROUTING.startsWith(c);
+  return dda || new RegExp(`^${USD_ROUTING}\\d{8}$`).test(c) || /^040004\d{8}$/.test(c) || /^GB\d{2}THEB040004\d{8}$/.test(c);
 }
 
 export function accountCurrencyOf(n: string): string {
@@ -96,9 +112,13 @@ export function maskAccountInput(raw: string): string {
     return `${d.slice(0, 2)}-${d.slice(2, 4)}-${d.slice(4, 6)} · ${d.slice(6, 10)}${d.length > 10 ? ` ${d.slice(10)}` : ""}`;
   }
   const d = compact.replace(/\D/g, "").slice(0, 17);
-  if (d.length <= 9) return d;
-  const acct = d.slice(9);
-  return `${d.slice(0, 9)} · ${acct.slice(0, 4)}${acct.length > 4 ? ` ${acct.slice(4)}` : ""}`;
+  if (d.startsWith(USD_ROUTING) || d.length > 8) {
+    if (d.length <= 9) return d;
+    const acct = d.slice(9);
+    return `${d.slice(0, 9)} · ${acct.slice(0, 4)}${acct.length > 4 ? ` ${acct.slice(4)}` : ""}`;
+  }
+  if (d.length <= 4) return d;
+  return `${d.slice(0, 4)} ${d.slice(4)}`;
 }
 
 export function greeting(now = new Date()): string {

@@ -16,7 +16,7 @@ func TestValidAccountNumber(t *testing.T) {
 	if err != nil || !ValidAccountNumber(usd) || !ValidAccountNumber(currency.Format(usd)) {
 		t.Fatal("usd format")
 	}
-	if ValidAccountNumber("01234567") || ValidAccountNumber("TB012345") || ValidAccountNumber("1234567") || ValidAccountNumber("123456789") {
+	if ValidAccountNumber("TB012345") || ValidAccountNumber("1234567") || ValidAccountNumber("123456789") {
 		t.Fatal("rejected formats")
 	}
 	gbp, err := currency.Issue(currency.GBP, "01234567")

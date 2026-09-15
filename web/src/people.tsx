@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { createPayee, deletePayee, errorMessage, updatePayee, type Payee } from "./api";
-import { accountCurrencyOf, accountLooksReady, compactAccountInput, formatAccountNumber, maskAccountInput, payeeLabel } from "./format";
+import { accountCurrencyOf, accountLooksReady, compactAccountInput, formatAccountNumber, maskAccountInput, payeeAccountHint, payeeLabel } from "./format";
 import { usePayees } from "./hooks";
 import { Banner, Sheet } from "./ui";
 
@@ -170,7 +170,7 @@ export function PeoplePanel({
                 setEditing(p);
               }}
             >
-              <span>{formatAccountNumber(p.account_number)}</span>
+              <span>{payeeAccountHint(p.account_number)}</span>
               <strong>{nickname(p) || "Saved"}</strong>
             </button>
           ))

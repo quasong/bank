@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { closeAccount, errorMessage, freezeAccount, openAccount, unfreezeAccount } from "../api";
-import { CURRENCIES, auditAmount, auditLabel, copyText, formatAccountNumber, openedLabel, recentWhen } from "../format";
+import { CURRENCIES, auditAmount, auditLabel, copyText, currencyName, formatAccountNumber, formatLocalAccount, openedLabel, recentWhen } from "../format";
 import { useAccounts, useAudit, useSelectedAccount, useToast } from "../hooks";
 import { MoneySheet } from "../moneyflow";
 import { PeoplePanel } from "../people";
@@ -78,9 +78,12 @@ export function AccountsPage() {
   }
 
   const acct = selected;
+  const log = (events ?? []).filter(
+    (ev) => !!acct && (ev.metadata?.account_id === acct.id || ev.metadata?.to_account_id === acct.id),
+  );
 
   return (
-    <Page title="Account" kicker={acct?.currency ?? "Balances"}>
+    <Page title="Account" kicker={acct ? currencyName(acct.currency) : "Balances"}>
       {error ? <Banner>{error}</Banner> : null}
       {!acct ? (
         <EmptyState
@@ -146,17 +149,32 @@ export function AccountsPage() {
           ) : null}
           {acct.status === "closed" ? <p className="kicker">This account is closed and cannot move money.</p> : null}
           <section className="panel facts">
-            <button
-              type="button"
-              className="fact"
-              onClick={() => {
-                void copyText(acct.account_number);
-                show("Copied account number");
-              }}
-            >
-              <span>{acct.currency === "EUR" ? "IBAN" : "Account number"}</span>
-              <strong>{formatAccountNumber(acct.account_number)}</strong>
-            </button>
+            <p className="day-label">Receiving details</p>
+            {acct.currency === "EUR" ? (
+              <button
+                type="button"
+                className="fact"
+                onClick={() => {
+                  void copyText(acct.account_number);
+                  show("Copied IBAN");
+                }}
+              >
+                <span>IBAN</span>
+                <strong>{acct.account_number_formatted || formatAccountNumber(acct.account_number)}</strong>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="fact"
+                onClick={() => {
+                  void copyText(acct.details?.account || acct.account_number);
+                  show("Copied account number");
+                }}
+              >
+                <span>Account number</span>
+                <strong>{formatLocalAccount(acct.details?.account || acct.account_number)}</strong>
+              </button>
+            )}
             {acct.details?.routing_number ? (
               <button
                 type="button"
@@ -170,6 +188,12 @@ export function AccountsPage() {
                 <strong>{acct.details.routing_number}</strong>
               </button>
             ) : null}
+            {acct.currency === "USD" ? (
+              <div className="fact">
+                <span>Account type</span>
+                <strong>Checking</strong>
+              </div>
+            ) : null}
             {acct.details?.sort_code ? (
               <button
                 type="button"
@@ -181,19 +205,6 @@ export function AccountsPage() {
               >
                 <span>Sort code</span>
                 <strong>{acct.details.sort_code}</strong>
-              </button>
-            ) : null}
-            {acct.details?.account ? (
-              <button
-                type="button"
-                className="fact"
-                onClick={() => {
-                  void copyText(acct.details?.account ?? "");
-                  show("Copied account");
-                }}
-              >
-                <span>Local account</span>
-                <strong>{acct.details.account}</strong>
               </button>
             ) : null}
             {acct.details?.bic ? (
@@ -218,12 +229,12 @@ export function AccountsPage() {
             ownAccountNumbers={ownNumbers}
             currency={acct.currency}
             onToast={show}
-            onSendTo={(number) => navigate(`/transfers?to=${number}`)}
+            onSendTo={(number) => navigate(`/transfers?from=${acct.id}&to=${encodeURIComponent(number)}`)}
           />
-          {events && events.length > 0 ? (
+          {log.length > 0 ? (
             <section className="panel facts">
               <p className="day-label">Account log</p>
-              {events.slice(0, 12).map((ev) => {
+              {log.slice(0, 12).map((ev) => {
                 const amount = auditAmount(ev.metadata);
                 return (
                   <div className="fact" key={ev.id}>

@@ -9,6 +9,7 @@ import {
   formatAccountNumber,
   formatMoney,
   maskAccountInput,
+  payeeAccountHint,
   payeeLabel,
   receiptCode,
   statusLabel,
@@ -17,7 +18,7 @@ import {
 import { centsToDollars, dollarsToCents } from "../money";
 import { useAccounts, usePayees, useSelectedAccount, useToast } from "../hooks";
 import { SavePersonSheet } from "../people";
-import { AmountField, Banner, EmptyState, IconCheck, Page, PageSkeleton, Toast } from "../ui";
+import { AmountField, Banner, CurrencyFlag, EmptyState, IconCheck, Page, PageSkeleton, Toast } from "../ui";
 
 export function TransfersPage() {
   const { accounts, error, setError, reload } = useAccounts();
@@ -265,7 +266,7 @@ export function TransfersPage() {
   }
 
   return (
-    <Page title="Send" kicker={selected?.currency ?? ""}>
+    <Page title="Send" kicker={selected ? `From ${selected.currency}` : ""}>
       {error ? <Banner>{error}</Banner> : null}
       {blocked ? (
         <Banner>
@@ -273,17 +274,26 @@ export function TransfersPage() {
         </Banner>
       ) : null}
       <form className="send-card" onSubmit={onContinue}>
-        {(accounts ?? []).length > 1 ? (
+        {accounts.length > 1 ? (
           <div className="chips" role="group" aria-label="Send from">
             {accounts.map((a) => (
               <button
                 key={a.id}
                 type="button"
-                className={`chip ccy-${a.currency}${selected?.id === a.id ? " chip-on" : ""}`}
-                onClick={() => select(a.id)}
+                className={`chip chip-payee ccy-${a.currency}${selected?.id === a.id ? " chip-on" : ""}`}
+                onClick={() => {
+                  select(a.id);
+                  if (toNumber && accountLooksReady(toNumber) && accountCurrencyOf(toNumber) !== a.currency) {
+                    setToNumber("");
+                    setPayeeName("");
+                  }
+                }}
               >
-                <i className="ccy-dot" aria-hidden="true" />
-                {a.currency}
+                <strong>
+                  <CurrencyFlag code={a.currency} />
+                  {a.currency}
+                </strong>
+                <span>{formatMoney(a.balance_cents, a.currency)}</span>
               </button>
             ))}
           </div>
@@ -349,7 +359,7 @@ export function TransfersPage() {
                 onClick={() => pickPayee(p.account_number, p.display_name)}
               >
                 {p.display_name !== p.account_number ? <strong>{p.display_name}</strong> : null}
-                <span>{formatAccountNumber(p.account_number)}</span>
+                <span>{payeeAccountHint(p.account_number)}</span>
               </button>
             ))}
             <button type="button" className="chip" onClick={() => setAdding(true)}>

@@ -1,10 +1,10 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { convertFX, errorMessage, quoteFX, type FXQuote } from "../api";
-import { CURRENCIES, currencyName, currencySymbol, formatMoney } from "../format";
+import { CURRENCIES, currencyName, currencyShortName, currencySymbol, formatMoney } from "../format";
 import { centsToDollars, dollarsToCents } from "../money";
 import { useAccounts, useSelectedAccount, useToast } from "../hooks";
-import { AmountField, Banner, EmptyState, IconCheck, IconSwap, Page, PageSkeleton, Toast } from "../ui";
+import { AmountField, Banner, ChoiceMenu, EmptyState, IconCheck, IconSwap, Page, PageSkeleton, Toast } from "../ui";
 
 function prettyRate(rate: string) {
   const n = Number(rate);
@@ -29,6 +29,15 @@ export function ConvertPage() {
   const blocked = selected != null && selected.status !== "active";
   const destAcct = (accounts ?? []).find((a) => a.currency === toCcy);
   const tooMuch = selected != null && cents != null && cents > selected.balance_cents;
+  const pickedFrom = useRef(false);
+
+  useEffect(() => {
+    if (pickedFrom.current || !accounts?.length) return;
+    pickedFrom.current = true;
+    if (selected && selected.status === "active" && selected.balance_cents > 0) return;
+    const funded = accounts.find((a) => a.status === "active" && a.balance_cents > 0);
+    if (funded) select(funded.id);
+  }, [accounts, selected, select]);
 
   useEffect(() => {
     if (!targets.some((c) => c === toCcy) && targets[0]) setToCcy(targets[0]);
@@ -165,21 +174,18 @@ export function ConvertPage() {
         <div className="fx-leg">
           <div className="fx-leg-h">
             <span>You send</span>
-            <label className="fx-ccy">
-              <span className="visually-hidden">From currency</span>
-              <select
-                value={selected?.id ?? ""}
-                onChange={(e) => select(e.target.value)}
-                disabled={blocked}
-                aria-label="From currency"
-              >
-                {(accounts ?? []).map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.currency}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ChoiceMenu
+              label="From currency"
+              value={selected?.id ?? ""}
+              disabled={blocked}
+              onChange={select}
+              options={accounts.map((a) => ({
+                value: a.id,
+                code: a.currency,
+                name: currencyShortName(a.currency),
+                amount: formatMoney(a.balance_cents, a.currency),
+              }))}
+            />
           </div>
           <AmountField value={amount} onChange={setAmount} disabled={blocked} autoFocus currency={fromCcy} label="" />
           <p className="avail">
@@ -191,6 +197,11 @@ export function ConvertPage() {
                   Max
                 </button>
               </>
+            ) : selected && selected.balance_cents === 0 && !blocked ? (
+              <span>
+                {" · "}
+                Pick a balance that has money
+              </span>
             ) : null}
           </p>
         </div>
@@ -206,17 +217,21 @@ export function ConvertPage() {
         <div className="fx-leg">
           <div className="fx-leg-h">
             <span>You get</span>
-            <label className="fx-ccy">
-              <span className="visually-hidden">To currency</span>
-              <select value={toCcy} onChange={(e) => setToCcy(e.target.value)} disabled={blocked} aria-label="To currency">
-                {targets.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                    {!accounts.some((a) => a.currency === c) ? " · new" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ChoiceMenu
+              label="To currency"
+              value={toCcy}
+              disabled={blocked}
+              onChange={setToCcy}
+              options={targets.map((c) => {
+                const dest = accounts.find((a) => a.currency === c);
+                return {
+                  value: c,
+                  code: c,
+                  name: currencyShortName(c),
+                  amount: dest ? formatMoney(dest.balance_cents, c) : "New",
+                };
+              })}
+            />
           </div>
           <p className="fx-out" aria-live="polite">
             {quote?.quote_cents ? (
@@ -227,7 +242,9 @@ export function ConvertPage() {
               <span className="faint">{currencySymbol(toCcy)}0.00</span>
             )}
           </p>
-          <p className="avail">{destAcct ? `${currencyName(toCcy)} balance` : `We'll open a ${toCcy} balance`}</p>
+          <p className="avail">
+            {destAcct ? `${formatMoney(destAcct.balance_cents, toCcy)} ${currencyName(toCcy)}` : `We'll open a ${toCcy} balance`}
+          </p>
         </div>
         <p className="fx-rate">
           {quote ? `1 ${fromCcy} = ${prettyRate(quote.rate)} ${toCcy}` : quoting ? "Fetching live rate…" : "Enter an amount for a live rate"}
