@@ -130,60 +130,10 @@ export function IconChevron() {
   );
 }
 
-function FlagUS() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect width="24" height="24" fill="#b31942" />
-      <rect y="1.85" width="24" height="1.85" fill="#fff" />
-      <rect y="5.54" width="24" height="1.85" fill="#fff" />
-      <rect y="9.23" width="24" height="1.85" fill="#fff" />
-      <rect y="12.92" width="24" height="1.85" fill="#fff" />
-      <rect y="16.62" width="24" height="1.85" fill="#fff" />
-      <rect y="20.31" width="24" height="1.85" fill="#fff" />
-      <rect width="11" height="12.92" fill="#0a3161" />
-      <circle cx="2.4" cy="2.6" r="0.55" fill="#fff" />
-      <circle cx="5.5" cy="2.6" r="0.55" fill="#fff" />
-      <circle cx="8.6" cy="2.6" r="0.55" fill="#fff" />
-      <circle cx="3.95" cy="4.7" r="0.55" fill="#fff" />
-      <circle cx="7.05" cy="4.7" r="0.55" fill="#fff" />
-      <circle cx="2.4" cy="6.8" r="0.55" fill="#fff" />
-      <circle cx="5.5" cy="6.8" r="0.55" fill="#fff" />
-      <circle cx="8.6" cy="6.8" r="0.55" fill="#fff" />
-      <circle cx="3.95" cy="8.9" r="0.55" fill="#fff" />
-      <circle cx="7.05" cy="8.9" r="0.55" fill="#fff" />
-      <circle cx="2.4" cy="11" r="0.55" fill="#fff" />
-      <circle cx="5.5" cy="11" r="0.55" fill="#fff" />
-      <circle cx="8.6" cy="11" r="0.55" fill="#fff" />
-    </svg>
-  );
-}
-
-function FlagEU() {
-  const stars = Array.from({ length: 12 }, (_, i) => {
-    const a = ((i * 30 - 90) * Math.PI) / 180;
-    return <circle key={i} cx={12 + Math.cos(a) * 6.4} cy={12 + Math.sin(a) * 6.4} r="1.05" fill="#ffcc00" />;
-  });
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect width="24" height="24" fill="#003399" />
-      {stars}
-    </svg>
-  );
-}
-
-function FlagUK() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect width="24" height="24" fill="#012169" />
-      <path d="M0 0 24 24M24 0 0 24" stroke="#fff" strokeWidth="5.2" />
-      <path d="M0 0 24 24M24 0 0 24" stroke="#c8102e" strokeWidth="2.4" />
-      <path d="M12 0v24M0 12h24" stroke="#fff" strokeWidth="7.2" />
-      <path d="M12 0v24M0 12h24" stroke="#c8102e" strokeWidth="4.2" />
-    </svg>
-  );
-}
-
 const FLAG_EMOJI: Record<string, string> = {
+  USD: "🇺🇸",
+  EUR: "🇪🇺",
+  GBP: "🇬🇧",
   AUD: "🇦🇺",
   BGN: "🇧🇬",
   BRL: "🇧🇷",
@@ -210,10 +160,9 @@ const FLAG_EMOJI: Record<string, string> = {
 };
 
 export function CurrencyFlag({ code }: { code: string }) {
-  const flag = code === "EUR" ? <FlagEU /> : code === "GBP" ? <FlagUK /> : code === "USD" ? <FlagUS /> : <span className="ccy-flag-emoji">{FLAG_EMOJI[code] ?? "🏳️"}</span>;
   return (
     <span className={`ccy-flag ccy-flag-${code}`} aria-hidden="true">
-      {flag}
+      {FLAG_EMOJI[code] ?? "🏳️"}
     </span>
   );
 }
