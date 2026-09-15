@@ -48,6 +48,11 @@ func run(log *slog.Logger) error {
 	authSvc := auth.NewService(store, auth.NewArgon2Hasher(), tokens, 7*24*time.Hour)
 	authH := auth.NewHandler(authSvc, cfg.CookieSecure)
 	accountSvc := account.NewService(store)
+	if n, err := accountSvc.SplitSharedCores(ctx); err != nil {
+		return err
+	} else if n > 0 {
+		log.Info("reissued shared account numbers", "count", n)
+	}
 	payeeSvc := payee.NewService(store, store)
 	accountH := account.NewHandler(accountSvc, payeeSvc, store)
 	transferH := transfer.NewHandler(transfer.NewService(store), payeeSvc, store)

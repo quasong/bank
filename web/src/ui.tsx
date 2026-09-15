@@ -16,7 +16,6 @@ import {
   receiptCode,
   recentWhen,
   sanitizeAmount,
-  shortAccountLabel,
   statusLabel,
   usdParts,
 } from "./format";
@@ -277,7 +276,6 @@ export function AccountHero({ account, onCopied }: { account: BankAccount; onCop
   const parts = usdParts(account.balance_cents);
   const ccy = account.currency || "USD";
   const formatted = account.account_number_formatted || formatAccountNumber(account.account_number);
-  const short = shortAccountLabel(account.account_number, ccy);
 
   async function copy() {
     void copyText(account.account_number);
@@ -295,9 +293,7 @@ export function AccountHero({ account, onCopied }: { account: BankAccount; onCop
           onClick={copy}
           aria-label={`Copy account number ${formatted}`}
         >
-          <span className="hero-id">
-            {ccy} · {short}
-          </span>
+          <span className="hero-id">{formatted}</span>
           <em>{copied ? "Copied" : "Copy"}</em>
         </button>
         <StatusPill status={account.status} />

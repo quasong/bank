@@ -45,17 +45,10 @@ export function formatLocalAccount(n: string): string {
 }
 
 export function shortAccountLabel(n: string, _ccy?: string): string {
-  const compact = compactAccountInput(n);
-  return compact.slice(-4) || compact;
+  return formatAccountNumber(n);
 }
 
 export function payeeAccountHint(n: string): string {
-  const compact = compactAccountInput(n);
-  if (compact.startsWith("GB") || compact.length === 22) return `IBAN · ${compact.slice(-4)}`;
-  if (compact.startsWith("040004")) return `04-00-04 · ${compact.slice(-4)}`;
-  if (compact.startsWith(USD_ROUTING) || compact.length === 17 || /^\d{8}$/.test(compact)) {
-    return formatLocalAccount(compact);
-  }
   return formatAccountNumber(n);
 }
 

@@ -29,7 +29,7 @@ func TestValidAccountNumber(t *testing.T) {
 	}
 }
 
-func TestOpenSecondCurrencySharesCore(t *testing.T) {
+func TestOpenSecondCurrencyDistinctCores(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemStore()
 	svc := NewService(store)
@@ -42,14 +42,76 @@ func TestOpenSecondCurrencySharesCore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if usd.Currency != currency.USD || eur.Currency != currency.EUR {
-		t.Fatalf("%s %s", usd.Currency, eur.Currency)
+	gbp, err := svc.Open(ctx, cid, currency.GBP)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if currency.Core(usd.AccountNumber) != currency.Core(eur.AccountNumber) {
-		t.Fatalf("core %s vs %s", usd.AccountNumber, eur.AccountNumber)
+	if usd.Currency != currency.USD || eur.Currency != currency.EUR || gbp.Currency != currency.GBP {
+		t.Fatalf("%s %s %s", usd.Currency, eur.Currency, gbp.Currency)
+	}
+	cores := map[string]struct{}{
+		currency.Core(usd.AccountNumber): {},
+		currency.Core(eur.AccountNumber): {},
+		currency.Core(gbp.AccountNumber): {},
+	}
+	if len(cores) != 3 {
+		t.Fatalf("shared suffix %s %s %s", usd.AccountNumber, eur.AccountNumber, gbp.AccountNumber)
 	}
 	if _, err := svc.Open(ctx, cid, currency.EUR); !errors.Is(err, ErrExists) {
 		t.Fatalf("dup eur: %v", err)
+	}
+}
+
+func TestSplitSharedCoresReissuesDuplicates(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemStore()
+	svc := NewService(store)
+	cid := uuid.New()
+	usdNum, err := currency.Issue(currency.USD, "00000003")
+	if err != nil {
+		t.Fatal(err)
+	}
+	eurNum, err := currency.Issue(currency.EUR, "00000003")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gbpNum, err := currency.Issue(currency.GBP, "00000003")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.OpenDeposit(ctx, Account{
+		ID: uuid.New(), CustomerID: cid, Currency: currency.USD, AccountNumber: usdNum, Status: StatusActive, LedgerID: uuid.New(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.OpenDeposit(ctx, Account{
+		ID: uuid.New(), CustomerID: cid, Currency: currency.EUR, AccountNumber: eurNum, Status: StatusActive, LedgerID: uuid.New(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.OpenDeposit(ctx, Account{
+		ID: uuid.New(), CustomerID: cid, Currency: currency.GBP, AccountNumber: gbpNum, Status: StatusActive, LedgerID: uuid.New(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	n, err := svc.SplitSharedCores(ctx)
+	if err != nil || n != 2 {
+		t.Fatalf("rewrote %d err=%v", n, err)
+	}
+	list, err := svc.List(ctx, cid)
+	if err != nil || len(list) != 3 {
+		t.Fatalf("list %+v %v", list, err)
+	}
+	cores := map[string]struct{}{}
+	for _, a := range list {
+		cores[currency.Core(a.AccountNumber)] = struct{}{}
+	}
+	if len(cores) != 3 {
+		t.Fatalf("still shared %+v", list)
+	}
+	again, err := svc.SplitSharedCores(ctx)
+	if err != nil || again != 0 {
+		t.Fatalf("idempotent %d %v", again, err)
 	}
 }
 

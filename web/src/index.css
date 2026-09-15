@@ -664,6 +664,7 @@ a.btn {
   font-size: 11px;
   font-weight: 500;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .chip-payee.chip-on span {
@@ -1533,9 +1534,9 @@ button.fact {
 }
 
 .hero-id {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
 }
 
 .hero-copy em {

@@ -111,6 +111,57 @@ func (s *Store) ListByCustomer(ctx context.Context, customerID uuid.UUID) ([]acc
 	return out, rows.Err()
 }
 
+func (s *Store) ListAll(ctx context.Context) ([]account.Account, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
+		FROM accounts a
+		JOIN ledger_accounts la ON la.account_id = a.id
+		ORDER BY a.opened_at, CASE a.currency WHEN 'USD' THEN 0 WHEN 'EUR' THEN 1 ELSE 2 END`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []account.Account
+	for rows.Next() {
+		a, err := scanAccountRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	if out == nil {
+		out = []account.Account{}
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SetNumber(ctx context.Context, id uuid.UUID, number string) error {
+	n, _, ok := currency.Normalize(number)
+	if !ok {
+		return account.ErrInvalidRequest
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx, `UPDATE accounts SET account_number = $2 WHERE id = $1`, id, n)
+	if err != nil {
+		var pe *pgconn.PgError
+		if errors.As(err, &pe) && pe.Code == "23505" {
+			return account.ErrNumberTaken
+		}
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return account.ErrNotFound
+	}
+	if _, err := tx.Exec(ctx, `UPDATE ledger_accounts SET name = $2 WHERE account_id = $1`, id, "Demand deposit "+n); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (s *Store) SetStatus(ctx context.Context, id uuid.UUID, next account.Status) (account.Account, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

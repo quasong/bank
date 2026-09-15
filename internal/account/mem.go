@@ -109,6 +109,43 @@ func (m *MemStore) ListByCustomer(_ context.Context, customerID uuid.UUID) ([]Ac
 	return out, nil
 }
 
+func (m *MemStore) ListAll(_ context.Context) ([]Account, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]Account, 0, len(m.accounts))
+	for _, a := range m.accounts {
+		out = append(out, a)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CustomerID != out[j].CustomerID {
+			return out[i].CustomerID.String() < out[j].CustomerID.String()
+		}
+		return out[i].OpenedAt.Before(out[j].OpenedAt)
+	})
+	return out, nil
+}
+
+func (m *MemStore) SetNumber(_ context.Context, id uuid.UUID, number string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	a, ok := m.accounts[id]
+	if !ok {
+		return ErrNotFound
+	}
+	n, _, ok := currency.Normalize(number)
+	if !ok {
+		return ErrInvalidRequest
+	}
+	for _, existing := range m.accounts {
+		if existing.ID != id && existing.AccountNumber == n {
+			return ErrNumberTaken
+		}
+	}
+	a.AccountNumber = n
+	m.accounts[id] = a
+	return nil
+}
+
 func (m *MemStore) SetStatus(_ context.Context, id uuid.UUID, next Status) (Account, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
