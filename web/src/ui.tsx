@@ -5,14 +5,17 @@ import {
   activityKindLabel,
   activityTitle,
   copyText,
+  currencyName,
   dateTimeLabel,
   formatAccountNumber,
   formatMoney,
   currencySymbol,
+  fxPair,
   payeeDetail,
   receiptCode,
   recentWhen,
   sanitizeAmount,
+  shortAccountLabel,
   statusLabel,
   usdParts,
 } from "./format";
@@ -203,6 +206,7 @@ export function AccountHero({ account, onCopied }: { account: BankAccount; onCop
   const parts = usdParts(account.balance_cents);
   const ccy = account.currency || "USD";
   const formatted = account.account_number_formatted || formatAccountNumber(account.account_number);
+  const short = shortAccountLabel(account.account_number, ccy);
 
   async function copy() {
     void copyText(account.account_number);
@@ -220,13 +224,15 @@ export function AccountHero({ account, onCopied }: { account: BankAccount; onCop
           onClick={copy}
           aria-label={`Copy account number ${formatted}`}
         >
-          {ccy} · {formatted}
+          <span className="hero-id">
+            {ccy} · {short}
+          </span>
           <em>{copied ? "Copied" : "Copy"}</em>
         </button>
         <StatusPill status={account.status} />
       </div>
       <div className="hero-label-row">
-        <p className="hero-label">Balance</p>
+        <p className="hero-label">{currencyName(ccy)}</p>
         <button
           type="button"
           className="hero-eye"
@@ -328,22 +334,102 @@ export function Sheet({
   );
 }
 
+export function Wallets({
+  accounts,
+  selectedId,
+  onSelect,
+  onAdd,
+}: {
+  accounts: BankAccount[];
+  selectedId?: string;
+  onSelect: (id: string) => void;
+  onAdd?: () => void;
+}) {
+  if (accounts.length < 2 && !onAdd) return null;
+  return (
+    <section className="wallets" aria-label="Balances">
+      {accounts.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          className={`wallet ccy-${a.currency}${a.id === selectedId ? " on" : ""}`}
+          onClick={() => onSelect(a.id)}
+        >
+          <span className="wallet-id">
+            <i className="ccy-dot" aria-hidden="true" />
+            <span>
+              <strong>{currencyName(a.currency)}</strong>
+              <em>{a.currency}</em>
+            </span>
+          </span>
+          <MoneyText cents={a.balance_cents} currency={a.currency} />
+        </button>
+      ))}
+      {onAdd ? (
+        <button type="button" className="wallet add" onClick={onAdd}>
+          <span className="wallet-id">
+            <span>
+              <strong>Add currency</strong>
+              <em>New balance</em>
+            </span>
+          </span>
+          <strong>+</strong>
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+export function CurrencyChoices({
+  currencies,
+  pending,
+  onPick,
+}: {
+  currencies: readonly string[];
+  pending?: boolean;
+  onPick: (ccy: string) => void;
+}) {
+  return (
+    <div className="sheet-actions col">
+      {currencies.map((ccy) => (
+        <button
+          key={ccy}
+          className={`currency-pick ccy-${ccy}`}
+          type="button"
+          disabled={pending}
+          onClick={() => onPick(ccy)}
+        >
+          <i className="ccy-dot" aria-hidden="true" />
+          <span>
+            <strong>
+              {currencySymbol(ccy)} {currencyName(ccy)}
+            </strong>
+            <em>{ccy === "EUR" ? "GB IBAN details" : ccy === "GBP" ? "UK sort code details" : "US account details"}</em>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function AmountField({
   value,
   onChange,
   disabled,
   autoFocus,
   currency = "USD",
+  label = "Amount",
 }: {
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
   autoFocus?: boolean;
   currency?: string;
+  label?: string;
 }) {
   return (
     <label className="amount-field">
-      <span>Amount</span>
+      {label ? <span>{label}</span> : null}
       <div className="amount-row">
         <span className="amount-ccy">{currencySymbol(currency)}</span>
         <input
@@ -354,6 +440,7 @@ export function AmountField({
           placeholder="0.00"
           disabled={disabled}
           autoFocus={autoFocus}
+          aria-label={label || "Amount"}
         />
       </div>
     </label>
@@ -379,6 +466,19 @@ export function PageSkeleton() {
   );
 }
 
+export function TxnSkeleton({ rows = 2 }: { rows?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }, (_, i) => (
+        <div className="txn skel-txn" key={i}>
+          <div className="skel skel-icon" />
+          <div className="skel skel-line" />
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function TxnRow({ item, onOpen }: { item: ActivityItem; onOpen?: (item: ActivityItem) => void }) {
   const body = (
     <>
@@ -394,6 +494,7 @@ export function TxnRow({ item, onOpen }: { item: ActivityItem; onOpen?: (item: A
             item.counterparty_account_number,
             item.counterparty_name,
             item.note,
+            item.description,
           )}{" "}
           · {recentWhen(item.created_at)}
         </span>
@@ -414,7 +515,8 @@ export function TxnRow({ item, onOpen }: { item: ActivityItem; onOpen?: (item: A
 export function TxnDetail({ item, onClose }: { item: ActivityItem; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   const receipt = receiptCode(item.journal_id, item.receipt);
-  const counterparty = payeeDetail(item.counterparty_account_number, item.counterparty_name);
+  const pair = item.kind === "fx" ? fxPair(item.description) : null;
+  const counterparty = pair ? `${pair.from} → ${pair.to}` : payeeDetail(item.counterparty_account_number, item.counterparty_name);
 
   async function copyReceipt() {
     const ok = await copyText(item.journal_id);
@@ -445,7 +547,7 @@ export function TxnDetail({ item, onClose }: { item: ActivityItem; onClose: () =
         ) : null}
         {counterparty ? (
           <div>
-            <span>{item.signed_cents >= 0 ? "From" : "To"}</span>
+            <span>{item.kind === "fx" ? "Pair" : item.signed_cents >= 0 ? "From" : "To"}</span>
             <strong>{counterparty}</strong>
           </div>
         ) : null}

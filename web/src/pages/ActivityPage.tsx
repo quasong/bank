@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { ActivityItem } from "../api";
 import { dayLabel } from "../format";
 import { useAccounts, useActivity, useSelectedAccount } from "../hooks";
-import { Banner, EmptyState, Page, PageSkeleton, TxnDetail, TxnRow } from "../ui";
+import { Banner, EmptyState, Page, PageSkeleton, TxnDetail, TxnRow, TxnSkeleton, Wallets } from "../ui";
 
 type Filter = "all" | "in" | "out";
 
@@ -32,7 +32,7 @@ export function ActivityPage() {
     return [...map.entries()];
   }, [visible]);
 
-  if (!accounts || items == null) {
+  if (!accounts) {
     return <PageSkeleton />;
   }
 
@@ -55,24 +55,15 @@ export function ActivityPage() {
   return (
     <Page title="Activity" kicker={selected.currency}>
       {error ? <Banner>{error}</Banner> : null}
-      {accounts.length > 1 ? (
-        <div className="chips">
-          {accounts.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              className={`chip${a.id === selected.id ? " chip-on" : ""}`}
-              onClick={() => select(a.id)}
-            >
-              {a.currency}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {items.length === 0 ? (
+      <Wallets accounts={accounts} selectedId={selected.id} onSelect={select} />
+      {items == null ? (
+        <section className="panel">
+          <TxnSkeleton rows={5} />
+        </section>
+      ) : items.length === 0 ? (
         <EmptyState
           title="Nothing here yet"
-          body="Add money or send a payment and it will show up in this list."
+          body={`No ${selected.currency} payments yet. Add money or convert into this balance.`}
           action={
             <Link className="btn btn-primary" to="/accounts?action=fund">
               Add money

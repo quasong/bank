@@ -1,3 +1,5 @@
+export const CURRENCIES = ["USD", "EUR", "GBP"] as const;
+
 export function usdParts(cents: number): { sign: string; dollars: string; frac: string } {
   const neg = cents < 0;
   const abs = Math.abs(cents);
@@ -23,7 +25,27 @@ export function formatUSD(cents: number): string {
   return formatMoney(cents, "USD");
 }
 
-export const CURRENCIES = ["USD", "EUR", "GBP"] as const;
+export function currencyName(ccy = "USD"): string {
+  if (ccy === "EUR") return "Euro";
+  if (ccy === "GBP") return "British pound";
+  return "US dollar";
+}
+
+export function shortAccountLabel(n: string, ccy?: string): string {
+  const compact = compactAccountInput(n);
+  if (ccy === "EUR" || compact.startsWith("GB")) return `IBAN · ${compact.slice(-4)}`;
+  if (ccy === "GBP" || compact.length === 14) {
+    return `${compact.slice(0, 2)}-${compact.slice(2, 4)}-${compact.slice(4, 6)} · ${compact.slice(-4)}`;
+  }
+  if (compact.length === 8) return `${compact.slice(0, 4)} · ${compact.slice(4)}`;
+  return formatAccountNumber(n);
+}
+
+export function fxPair(description?: string): { from: string; to: string } | null {
+  const m = (description ?? "").match(/FX \d+ ([A-Z]{3}) to \d+ ([A-Z]{3})/i);
+  if (!m) return null;
+  return { from: m[1], to: m[2] };
+}
 
 export function compactAccountInput(raw: string, max = 22): string {
   return raw.replace(/[\s·-]/g, "").toUpperCase().slice(0, max);
@@ -99,12 +121,17 @@ export function activityHint(
   counterpartyNumber?: string,
   counterpartyName?: string,
   note?: string,
+  description?: string,
 ): string {
   const memo = (note ?? "").trim();
   if (memo) return memo;
   if (kind === "funding") return "Added instantly";
   if (kind === "withdrawal") return "Cashed out";
-  if (kind === "fx") return signedCents >= 0 ? "From another balance" : "To another balance";
+  if (kind === "fx") {
+    const pair = fxPair(description);
+    if (pair) return signedCents >= 0 ? `From ${pair.from}` : `To ${pair.to}`;
+    return "Currency conversion";
+  }
   if (kind === "transfer") {
     const who = payeeLabel(counterpartyNumber, counterpartyName);
     if (signedCents >= 0) return who ? `From ${who}` : "From another account";

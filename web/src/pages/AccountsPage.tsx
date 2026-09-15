@@ -5,7 +5,7 @@ import { CURRENCIES, auditAmount, auditLabel, copyText, formatAccountNumber, ope
 import { useAccounts, useAudit, useSelectedAccount, useToast } from "../hooks";
 import { MoneySheet } from "../moneyflow";
 import { PeoplePanel } from "../people";
-import { AccountHero, Banner, EmptyState, IconArrow, IconFreeze, IconMinus, IconPlus, IconSwap, Page, PageSkeleton, Sheet, Toast } from "../ui";
+import { AccountHero, Banner, CurrencyChoices, EmptyState, IconArrow, IconMinus, IconPlus, IconSwap, Page, PageSkeleton, Sheet, Toast, Wallets } from "../ui";
 
 type MoneyKind = "fund" | "withdraw";
 
@@ -94,21 +94,13 @@ export function AccountsPage() {
         />
       ) : (
         <>
-          {accounts.length > 1 ? (
-            <div className="chips">
-              {accounts.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  className={`chip${a.id === acct.id ? " chip-on" : ""}`}
-                  onClick={() => select(a.id)}
-                >
-                  {a.currency}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <AccountHero account={acct} onCopied={() => show("Copied account number")} />
+          <Wallets
+            accounts={accounts}
+            selectedId={acct.id}
+            onSelect={select}
+            onAdd={missing.length > 0 ? () => setAdding(true) : undefined}
+          />
+          <AccountHero account={acct} onCopied={() => show("Copied")} />
           {acct.status === "active" ? (
             <div className="quicks">
               <button className="quick" type="button" onClick={() => setForm("fund")}>
@@ -134,12 +126,6 @@ export function AccountsPage() {
                   <IconSwap />
                 </span>
                 Convert
-              </button>
-              <button className="quick" type="button" disabled={pending} onClick={() => setFreezing(true)}>
-                <span className="quick-icon">
-                  <IconFreeze />
-                </span>
-                Freeze
               </button>
             </div>
           ) : null}
@@ -169,7 +155,7 @@ export function AccountsPage() {
               }}
             >
               <span>{acct.currency === "EUR" ? "IBAN" : "Account number"}</span>
-              <strong>{acct.account_number_formatted || formatAccountNumber(acct.account_number)}</strong>
+              <strong>{formatAccountNumber(acct.account_number)}</strong>
             </button>
             {acct.details?.routing_number ? (
               <button
@@ -228,15 +214,9 @@ export function AccountsPage() {
               <strong>{openedLabel(acct.opened_at)}</strong>
             </div>
           </section>
-          {missing.length > 0 ? (
-            <div className="manage">
-              <button className="btn btn-secondary" type="button" onClick={() => setAdding(true)}>
-                Add currency
-              </button>
-            </div>
-          ) : null}
           <PeoplePanel
             ownAccountNumbers={ownNumbers}
+            currency={acct.currency}
             onToast={show}
             onSendTo={(number) => navigate(`/transfers?to=${number}`)}
           />
@@ -262,6 +242,9 @@ export function AccountsPage() {
           ) : null}
           {acct.status === "active" ? (
             <div className="manage">
+              <button className="btn btn-quiet" type="button" disabled={pending} onClick={() => setFreezing(true)}>
+                Freeze account
+              </button>
               <button className="btn btn-quiet" type="button" disabled={pending} onClick={() => setClosing(true)}>
                 Close account
               </button>
@@ -277,13 +260,7 @@ export function AccountsPage() {
       {adding ? (
         <Sheet title="Add a currency" onClose={() => setAdding(false)}>
           <p className="sheet-copy">Each currency gets its own local details, like Wise or Revolut.</p>
-          <div className="sheet-actions col">
-            {missing.map((ccy) => (
-              <button key={ccy} className="btn btn-primary btn-block" type="button" disabled={pending} onClick={() => void onOpen(ccy)}>
-                Open {ccy}
-              </button>
-            ))}
-          </div>
+          <CurrencyChoices currencies={missing} pending={pending} onPick={(ccy) => void onOpen(ccy)} />
         </Sheet>
       ) : null}
 

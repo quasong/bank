@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { createPayee, deletePayee, errorMessage, updatePayee, type Payee } from "./api";
-import { accountLooksReady, compactAccountInput, formatAccountNumber, maskAccountInput, payeeLabel } from "./format";
+import { accountCurrencyOf, accountLooksReady, compactAccountInput, formatAccountNumber, maskAccountInput, payeeLabel } from "./format";
 import { usePayees } from "./hooks";
 import { Banner, Sheet } from "./ui";
 
@@ -87,10 +87,12 @@ export function SavePersonSheet({
 
 export function PeoplePanel({
   ownAccountNumbers = [],
+  currency,
   onToast,
   onSendTo,
 }: {
   ownAccountNumbers?: string[];
+  currency?: string;
   onToast: (text: string) => void;
   onSendTo?: (accountNumber: string, displayName: string) => void;
 }) {
@@ -101,7 +103,9 @@ export function PeoplePanel({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const saved = (payees ?? []).filter((p) => !ownAccountNumbers.includes(p.account_number));
+  const saved = (payees ?? []).filter(
+    (p) => !ownAccountNumbers.includes(p.account_number) && (!currency || accountCurrencyOf(p.account_number) === currency),
+  );
 
   async function onRename(e: FormEvent) {
     e.preventDefault();
@@ -151,7 +155,9 @@ export function PeoplePanel({
           </button>
         </div>
         {saved.length === 0 ? (
-          <p className="panel-empty">Save someone to send faster next time.</p>
+          <p className="panel-empty">
+            {currency ? `No ${currency} people yet. Save someone to send faster.` : "Save someone to send faster next time."}
+          </p>
         ) : (
           saved.map((p) => (
             <button

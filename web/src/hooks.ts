@@ -19,22 +19,38 @@ export function useAccounts() {
 }
 
 export function useActivity(accountId: string | undefined) {
-  const [items, setItems] = useState<ActivityItem[] | null>(null);
+  const [state, setState] = useState<{ id?: string; items: ActivityItem[] | null }>({ items: null });
 
   const reload = useCallback(async () => {
     if (!accountId) {
-      setItems([]);
+      setState({ id: undefined, items: [] });
       return [];
     }
     const data = await listActivity(accountId);
-    setItems(data.items);
+    setState({ id: accountId, items: data.items });
     return data.items;
   }, [accountId]);
 
   useEffect(() => {
-    reload().catch(() => setItems([]));
-  }, [reload]);
+    let cancelled = false;
+    if (!accountId) {
+      setState({ id: undefined, items: [] });
+      return;
+    }
+    setState({ id: accountId, items: null });
+    listActivity(accountId)
+      .then((data) => {
+        if (!cancelled) setState({ id: accountId, items: data.items });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ id: accountId, items: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId]);
 
+  const items = state.id === accountId ? state.items : null;
   return { items, reload };
 }
 
@@ -72,6 +88,16 @@ export function useAudit() {
 
 const SELECTED_KEY = "tb.selected-account";
 
+function preferredAccount(accounts: BankAccount[], id: string) {
+  const match = accounts.find((a) => a.id === id);
+  if (match) return match;
+  return (
+    accounts.find((a) => a.status === "active" && a.balance_cents > 0) ??
+    accounts.find((a) => a.status === "active") ??
+    accounts[0]
+  );
+}
+
 export function useSelectedAccount(accounts: BankAccount[] | null) {
   const [id, setId] = useState(() => {
     try {
@@ -81,7 +107,7 @@ export function useSelectedAccount(accounts: BankAccount[] | null) {
     }
   });
 
-  const selected = accounts?.find((a) => a.id === id) ?? accounts?.[0];
+  const selected = accounts?.length ? preferredAccount(accounts, id) : undefined;
 
   const select = useCallback((next: string) => {
     setId(next);
@@ -95,8 +121,7 @@ export function useSelectedAccount(accounts: BankAccount[] | null) {
   useEffect(() => {
     if (!accounts?.length) return;
     if (!accounts.some((a) => a.id === id)) {
-      const next = accounts.find((a) => a.status === "active")?.id ?? accounts[0].id;
-      select(next);
+      select(preferredAccount(accounts, "").id);
     }
   }, [accounts, id, select]);
 

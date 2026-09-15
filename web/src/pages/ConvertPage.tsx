@@ -1,10 +1,16 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { convertFX, errorMessage, quoteFX, type FXQuote } from "../api";
-import { CURRENCIES, formatMoney } from "../format";
+import { CURRENCIES, currencyName, currencySymbol, formatMoney } from "../format";
 import { centsToDollars, dollarsToCents } from "../money";
 import { useAccounts, useSelectedAccount, useToast } from "../hooks";
-import { AmountField, Banner, EmptyState, IconCheck, Page, PageSkeleton, Toast } from "../ui";
+import { AmountField, Banner, EmptyState, IconCheck, IconSwap, Page, PageSkeleton, Toast } from "../ui";
+
+function prettyRate(rate: string) {
+  const n = Number(rate);
+  if (!Number.isFinite(n)) return rate;
+  return n.toFixed(5);
+}
 
 export function ConvertPage() {
   const { accounts, error, setError, reload } = useAccounts();
@@ -21,6 +27,8 @@ export function ConvertPage() {
   const fromCcy = selected?.currency || "USD";
   const targets = useMemo(() => CURRENCIES.filter((c) => c !== fromCcy), [fromCcy]);
   const blocked = selected != null && selected.status !== "active";
+  const destAcct = (accounts ?? []).find((a) => a.currency === toCcy);
+  const tooMuch = selected != null && cents != null && cents > selected.balance_cents;
 
   useEffect(() => {
     if (!targets.some((c) => c === toCcy) && targets[0]) setToCcy(targets[0]);
@@ -29,6 +37,7 @@ export function ConvertPage() {
   useEffect(() => {
     if (!selected || !cents || cents <= 0 || fromCcy === toCcy || blocked) {
       setQuote(null);
+      setQuoting(false);
       return;
     }
     let cancelled = false;
@@ -36,23 +45,36 @@ export function ConvertPage() {
     const timer = window.setTimeout(() => {
       quoteFX(fromCcy, toCcy, cents)
         .then((res) => {
-          if (!cancelled) setQuote(res.quote);
+          if (cancelled) return;
+          setError("");
+          setQuote(res.quote);
         })
         .catch((err) => {
-          if (!cancelled) {
-            setQuote(null);
-            setError(errorMessage(err, "Could not fetch a live rate"));
-          }
+          if (cancelled) return;
+          setQuote(null);
+          setError(errorMessage(err, "Could not fetch a live rate"));
         })
         .finally(() => {
           if (!cancelled) setQuoting(false);
         });
-    }, 280);
+    }, 220);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
   }, [selected, cents, fromCcy, toCcy, blocked, setError]);
+
+  function swap() {
+    if (!destAcct || destAcct.status !== "active") return;
+    let nextAmount = quote?.quote_cents ? centsToDollars(quote.quote_cents) : "";
+    if (quote?.quote_cents && quote.quote_cents > destAcct.balance_cents) {
+      nextAmount = destAcct.balance_cents > 0 ? centsToDollars(destAcct.balance_cents) : "";
+    }
+    select(destAcct.id);
+    setToCcy(fromCcy);
+    setAmount(nextAmount);
+    setQuote(null);
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -101,10 +123,12 @@ export function ConvertPage() {
           <div className="success-mark">
             <IconCheck />
           </div>
-          <h2>
-            {done.from} → {done.to}
-          </h2>
-          <p>Live rate {done.rate}</p>
+          <h2>You converted {done.from}</h2>
+          <p>
+            Into {done.to}
+            <br />
+            Live rate {done.rate}
+          </p>
           <button
             className="btn btn-primary btn-block"
             type="button"
@@ -125,6 +149,9 @@ export function ConvertPage() {
     );
   }
 
+  const canConvert = !blocked && !pending && !!quote?.quote_cents && !!cents && !tooMuch;
+  const cta = quote?.quote_cents && cents ? `Convert ${formatMoney(cents, fromCcy)} to ${formatMoney(quote.quote_cents, toCcy)}` : "Convert";
+
   return (
     <Page title="Convert" kicker="Live ECB rate">
       {error ? <Banner>{error}</Banner> : null}
@@ -133,61 +160,81 @@ export function ConvertPage() {
           This account cannot convert right now. <Link to="/accounts">See details</Link>
         </Banner>
       ) : null}
-      <form className="send-card" onSubmit={onSubmit}>
-        <div className="chips">
-          {(accounts ?? []).map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              className={`chip${selected?.id === a.id ? " chip-on" : ""}`}
-              onClick={() => select(a.id)}
-            >
-              {a.currency}
-            </button>
-          ))}
-        </div>
-        <AmountField value={amount} onChange={setAmount} disabled={blocked} autoFocus currency={fromCcy} />
-        <p className="avail">
-          Available {formatMoney(selected?.balance_cents ?? 0, fromCcy)}
-          {selected && selected.balance_cents > 0 && !blocked ? (
-            <>
-              {" · "}
-              <button type="button" className="text-link" onClick={() => setAmount(centsToDollars(selected.balance_cents))}>
-                Max
-              </button>
-            </>
-          ) : null}
-        </p>
-        <label>
-          To
-          <select value={toCcy} onChange={(e) => setToCcy(e.target.value)} disabled={blocked}>
-            {targets.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="review">
-          <div>
-            <span>You convert</span>
-            <strong>{cents ? formatMoney(cents, fromCcy) : "—"}</strong>
+      {tooMuch ? <Banner>You don't have that much {fromCcy} available.</Banner> : null}
+      <form className="send-card fx-card" onSubmit={onSubmit}>
+        <div className="fx-leg">
+          <div className="fx-leg-h">
+            <span>You send</span>
+            <label className="fx-ccy">
+              <span className="visually-hidden">From currency</span>
+              <select
+                value={selected?.id ?? ""}
+                onChange={(e) => select(e.target.value)}
+                disabled={blocked}
+                aria-label="From currency"
+              >
+                {(accounts ?? []).map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.currency}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
-          <div>
-            <span>They receive</span>
-            <strong>{quote?.quote_cents ? formatMoney(quote.quote_cents, toCcy) : quoting ? "…" : "—"}</strong>
-          </div>
-          <div>
-            <span>Rate</span>
-            <strong>{quote ? `1 ${fromCcy} = ${quote.rate} ${toCcy}` : "—"}</strong>
-          </div>
+          <AmountField value={amount} onChange={setAmount} disabled={blocked} autoFocus currency={fromCcy} label="" />
+          <p className="avail">
+            {formatMoney(selected?.balance_cents ?? 0, fromCcy)} available
+            {selected && selected.balance_cents > 0 && !blocked ? (
+              <>
+                {" · "}
+                <button type="button" className="text-link" onClick={() => setAmount(centsToDollars(selected.balance_cents))}>
+                  Max
+                </button>
+              </>
+            ) : null}
+          </p>
         </div>
         <button
-          className="btn btn-primary btn-block"
-          type="submit"
-          disabled={blocked || pending || !quote?.quote_cents || !cents || (selected != null && cents > selected.balance_cents)}
+          type="button"
+          className="fx-swap"
+          onClick={swap}
+          disabled={!destAcct || destAcct.status !== "active" || blocked}
+          aria-label="Swap currencies"
         >
-          {pending ? "Converting…" : "Convert"}
+          <IconSwap />
+        </button>
+        <div className="fx-leg">
+          <div className="fx-leg-h">
+            <span>You get</span>
+            <label className="fx-ccy">
+              <span className="visually-hidden">To currency</span>
+              <select value={toCcy} onChange={(e) => setToCcy(e.target.value)} disabled={blocked} aria-label="To currency">
+                {targets.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                    {!accounts.some((a) => a.currency === c) ? " · new" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p className="fx-out" aria-live="polite">
+            {quote?.quote_cents ? (
+              formatMoney(quote.quote_cents, toCcy)
+            ) : quoting ? (
+              <span className="faint">…</span>
+            ) : (
+              <span className="faint">{currencySymbol(toCcy)}0.00</span>
+            )}
+          </p>
+          <p className="avail">{destAcct ? `${currencyName(toCcy)} balance` : `We'll open a ${toCcy} balance`}</p>
+        </div>
+        <p className="fx-rate">
+          {quote ? `1 ${fromCcy} = ${prettyRate(quote.rate)} ${toCcy}` : quoting ? "Fetching live rate…" : "Enter an amount for a live rate"}
+          {quote?.as_of ? ` · as of ${quote.as_of.slice(0, 10)}` : ""}
+        </p>
+        <button className="btn btn-primary btn-block" type="submit" disabled={!canConvert}>
+          {pending ? "Converting…" : cta}
         </button>
       </form>
       <Toast text={toast} />

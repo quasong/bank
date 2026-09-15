@@ -7,18 +7,20 @@ import { MoneySheet } from "../moneyflow";
 import {
   AccountHero,
   Banner,
+  CurrencyChoices,
   EmptyState,
   IconPlus,
   IconSend,
   IconSwap,
   IconOut,
-  MoneyText,
   Page,
   PageSkeleton,
   Sheet,
   Toast,
   TxnDetail,
   TxnRow,
+  TxnSkeleton,
+  Wallets,
 } from "../ui";
 
 type MoneyKind = "fund" | "withdraw";
@@ -38,11 +40,12 @@ export function OverviewPage() {
   async function onOpen(currency?: string) {
     setError("");
     setPending(true);
+    const first = (accounts?.length ?? 0) === 0;
     try {
       const res = await openAccount(currency);
-      const list = await reload();
-      select(res.account.id);
-      show(list.length > 1 ? `${res.account.currency} opened` : "Account opened");
+      await reload();
+      if (first) select(res.account.id);
+      show(first ? "Account opened" : `${res.account.currency} is ready`);
       setAdding(false);
     } catch (err) {
       setError(errorMessage(err, "Could not open account"));
@@ -71,7 +74,7 @@ export function OverviewPage() {
       {accounts.length === 0 ? (
         <EmptyState
           title="Open your USD account"
-          body="One tap creates a USD balance. You can add euros and pounds after that."
+          body="One tap creates a US dollar balance. Add euros and pounds whenever you need them."
           action={
             <button className="btn btn-primary" type="button" disabled={pending} onClick={() => void onOpen()}>
               {pending ? "Opening…" : "Open account"}
@@ -80,34 +83,19 @@ export function OverviewPage() {
         />
       ) : selected ? (
         <>
-          <AccountHero account={selected} onCopied={() => show("Copied account number")} />
+          <AccountHero account={selected} onCopied={() => show("Copied")} />
           {!canMove ? (
             <Banner>
               This account is {statusLabel(selected.status)}.{" "}
               <Link to="/accounts">{selected.status === "frozen" ? "Unfreeze it" : "See details"}</Link> to move money.
             </Banner>
           ) : null}
-          {accounts.length > 1 || missing.length > 0 ? (
-            <section className="wallets">
-              {accounts.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  className={`wallet${a.id === selected.id ? " on" : ""}`}
-                  onClick={() => select(a.id)}
-                >
-                  <span>{a.currency}</span>
-                  <MoneyText cents={a.balance_cents} currency={a.currency} />
-                </button>
-              ))}
-              {missing.length > 0 ? (
-                <button type="button" className="wallet add" onClick={() => setAdding(true)}>
-                  <span>Add</span>
-                  <strong>+</strong>
-                </button>
-              ) : null}
-            </section>
-          ) : null}
+          <Wallets
+            accounts={accounts}
+            selectedId={selected.id}
+            onSelect={select}
+            onAdd={missing.length > 0 ? () => setAdding(true) : undefined}
+          />
           <div className="quicks">
             {canMove ? (
               <Link className="quick" to="/transfers">
@@ -154,20 +142,25 @@ export function OverviewPage() {
           </div>
           <section className="panel">
             <div className="panel-h">
-              <h2>Activity</h2>
+              <h2>{selected.currency} activity</h2>
               <Link to="/activity">See all</Link>
             </div>
             {items == null ? (
-              <div className="txn skel-txn">
-                <div className="skel skel-icon" />
-                <div className="skel skel-line" />
-              </div>
+              <TxnSkeleton rows={3} />
             ) : recent.length === 0 ? (
               <p className="panel-empty">
-                Nothing here yet.{" "}
-                <button type="button" className="text-link" disabled={!canMove} onClick={() => setMoney("fund")}>
-                  Add money
-                </button>{" "}
+                Nothing in {selected.currency} yet.{" "}
+                {canMove ? (
+                  <>
+                    <button type="button" className="text-link" onClick={() => setMoney("fund")}>
+                      Add money
+                    </button>
+                    {" or "}
+                    <Link to="/convert">convert</Link>
+                  </>
+                ) : (
+                  "Add money"
+                )}{" "}
                 to get started.
               </p>
             ) : (
@@ -183,20 +176,8 @@ export function OverviewPage() {
       ) : null}
       {adding ? (
         <Sheet title="Add a currency" onClose={() => setAdding(false)}>
-          <p className="sheet-copy">Open another balance. Local details look like a real account in that currency.</p>
-          <div className="sheet-actions col">
-            {missing.map((ccy) => (
-              <button
-                key={ccy}
-                className="btn btn-primary btn-block"
-                type="button"
-                disabled={pending}
-                onClick={() => void onOpen(ccy)}
-              >
-                Open {ccy}
-              </button>
-            ))}
-          </div>
+          <p className="sheet-copy">Each balance gets its own local details, like Wise.</p>
+          <CurrencyChoices currencies={missing} pending={pending} onPick={(ccy) => void onOpen(ccy)} />
         </Sheet>
       ) : null}
       {openTxn ? <TxnDetail item={openTxn} onClose={() => setOpenTxn(null)} /> : null}

@@ -56,7 +56,9 @@ export function TransfersPage() {
     selected && cents != null && cents > 0 && cents <= selected.balance_cents ? selected.balance_cents - cents : null;
   const dest = payeeLabel(toNumber, payeeName) || formatAccountNumber(toNumber);
   const alreadySaved = saved.some((p) => p.account_number === toNumber);
-  const destReady = accountLooksReady(toNumber) && accountCurrencyOf(toNumber) === (selected?.currency ?? "");
+  const destCcy = toNumber ? accountCurrencyOf(toNumber) : "";
+  const destReady = accountLooksReady(toNumber) && destCcy === (selected?.currency ?? "");
+  const destMismatch = accountLooksReady(toNumber) && !ownAccount && destCcy !== (selected?.currency ?? "");
   const ready =
     !blocked &&
     cents != null &&
@@ -271,14 +273,15 @@ export function TransfersPage() {
       ) : null}
       <form className="send-card" onSubmit={onContinue}>
         {(accounts ?? []).length > 1 ? (
-          <div className="chips">
+          <div className="chips" role="group" aria-label="Send from">
             {accounts.map((a) => (
               <button
                 key={a.id}
                 type="button"
-                className={`chip${selected?.id === a.id ? " chip-on" : ""}`}
+                className={`chip ccy-${a.currency}${selected?.id === a.id ? " chip-on" : ""}`}
                 onClick={() => select(a.id)}
               >
+                <i className="ccy-dot" aria-hidden="true" />
                 {a.currency}
               </button>
             ))}
@@ -360,13 +363,20 @@ export function TransfersPage() {
             </button>
           </p>
         ) : null}
-        <p className={`avail${ownAccount ? " avail-warn" : ""}`}>
+        <p className={`avail${ownAccount || destMismatch ? " avail-warn" : ""}`}>
           {ownAccount
             ? "That's your own account"
-            : toNumber && !destReady
-              ? "Same-currency local details only"
-              : "Same currency as the balance you send from"}
+            : destMismatch
+              ? `That's ${destCcy}. Convert first, then send ${destCcy}.`
+              : toNumber && !destReady
+                ? `Enter complete ${selected?.currency ?? ""} details`
+                : "Same currency as the balance you send from"}
         </p>
+        {destMismatch ? (
+          <Link className="text-link" to="/convert">
+            Convert to {destCcy}
+          </Link>
+        ) : null}
         <button className="btn btn-primary btn-block" type="submit" disabled={!ready}>
           {cents != null && cents > 0 ? `Continue · ${formatMoney(cents, selected?.currency)}` : "Continue"}
         </button>
