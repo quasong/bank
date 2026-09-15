@@ -70,6 +70,39 @@ export function useAudit() {
   return { events, reload };
 }
 
+const SELECTED_KEY = "tb.selected-account";
+
+export function useSelectedAccount(accounts: BankAccount[] | null) {
+  const [id, setId] = useState(() => {
+    try {
+      return sessionStorage.getItem(SELECTED_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+
+  const selected = accounts?.find((a) => a.id === id) ?? accounts?.[0];
+
+  const select = useCallback((next: string) => {
+    setId(next);
+    try {
+      sessionStorage.setItem(SELECTED_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!accounts?.length) return;
+    if (!accounts.some((a) => a.id === id)) {
+      const next = accounts.find((a) => a.status === "active")?.id ?? accounts[0].id;
+      select(next);
+    }
+  }, [accounts, id, select]);
+
+  return { selected, select };
+}
+
 export function useToast(ms = 2400) {
   const [text, setText] = useState("");
   const timer = useRef(0);

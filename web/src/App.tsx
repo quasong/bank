@@ -5,6 +5,7 @@ import { AppShell } from "./pages/AppShell";
 import { OverviewPage } from "./pages/OverviewPage";
 import { AccountsPage } from "./pages/AccountsPage";
 import { TransfersPage } from "./pages/TransfersPage";
+import { ConvertPage } from "./pages/ConvertPage";
 import { ActivityPage } from "./pages/ActivityPage";
 import { LoginPage, RegisterPage } from "./pages/AuthPages";
 import { BootScreen } from "./ui";
@@ -35,6 +36,7 @@ export function App() {
         <Route path="/" element={<OverviewPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/transfers" element={<TransfersPage />} />
+        <Route path="/convert" element={<ConvertPage />} />
         <Route path="/activity" element={<ActivityPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

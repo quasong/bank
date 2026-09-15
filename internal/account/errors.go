@@ -15,4 +15,6 @@ var (
 	ErrSameAccount    = errors.New("same account")
 	ErrNumberTaken    = errors.New("account number taken")
 	ErrHasBalance     = errors.New("account has balance")
+	ErrCurrency       = errors.New("currency mismatch")
+	ErrRates          = errors.New("rates unavailable")
 )

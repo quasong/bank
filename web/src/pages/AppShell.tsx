@@ -1,11 +1,12 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { BANK_NAME } from "../brand";
-import { IconHome, IconList, IconSend, IconWallet } from "../ui";
+import { IconHome, IconList, IconSend, IconSwap, IconWallet } from "../ui";
 
 const links = [
   { to: "/", label: "Home", icon: <IconHome />, end: true },
   { to: "/accounts", label: "Account", icon: <IconWallet />, end: false },
+  { to: "/convert", label: "Convert", icon: <IconSwap />, end: false },
   { to: "/transfers", label: "Send", icon: <IconSend />, end: false },
   { to: "/activity", label: "Activity", icon: <IconList />, end: false },
 ];

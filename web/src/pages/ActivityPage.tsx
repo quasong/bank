@@ -2,15 +2,15 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ActivityItem } from "../api";
 import { dayLabel } from "../format";
-import { useAccounts, useActivity } from "../hooks";
+import { useAccounts, useActivity, useSelectedAccount } from "../hooks";
 import { Banner, EmptyState, Page, PageSkeleton, TxnDetail, TxnRow } from "../ui";
 
 type Filter = "all" | "in" | "out";
 
 export function ActivityPage() {
   const { accounts, error } = useAccounts();
-  const account = accounts?.[0];
-  const { items } = useActivity(account?.id);
+  const { selected, select } = useSelectedAccount(accounts);
+  const { items } = useActivity(selected?.id);
   const [filter, setFilter] = useState<Filter>("all");
   const [openTxn, setOpenTxn] = useState<ActivityItem | null>(null);
 
@@ -36,7 +36,7 @@ export function ActivityPage() {
     return <PageSkeleton />;
   }
 
-  if (!account) {
+  if (!selected) {
     return (
       <Page title="Activity">
         <EmptyState
@@ -53,8 +53,22 @@ export function ActivityPage() {
   }
 
   return (
-    <Page title="Activity">
+    <Page title="Activity" kicker={selected.currency}>
       {error ? <Banner>{error}</Banner> : null}
+      {accounts.length > 1 ? (
+        <div className="chips">
+          {accounts.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              className={`chip${a.id === selected.id ? " chip-on" : ""}`}
+              onClick={() => select(a.id)}
+            >
+              {a.currency}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {items.length === 0 ? (
         <EmptyState
           title="Nothing here yet"

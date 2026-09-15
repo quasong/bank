@@ -4,10 +4,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"bank/internal/currency"
 )
 
-// VaultID is the seeded cash (asset) ledger account.
-var VaultID = uuid.MustParse("11111111-1111-1111-1111-111111111111")
+// VaultID is the seeded USD cash (asset) ledger account.
+var VaultID = currency.VaultUSD
 
 type Kind string
 
@@ -15,6 +17,7 @@ const (
 	KindFunding    Kind = "funding"
 	KindTransfer   Kind = "transfer"
 	KindWithdrawal Kind = "withdrawal"
+	KindFX         Kind = "fx"
 )
 
 type Side string
@@ -35,6 +38,7 @@ type Line struct {
 	LedgerAccountID uuid.UUID
 	Side            Side
 	AmountCents     int64
+	Currency        currency.Code
 }
 
 type Journal struct {

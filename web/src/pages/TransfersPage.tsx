@@ -1,14 +1,26 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { createTransfer, errorMessage } from "../api";
-import { digitsOnly, copyText, formatAccountNumber, formatUSD, maskAccountInput, payeeLabel, receiptCode, statusLabel } from "../format";
+import {
+  accountCurrencyOf,
+  accountLooksReady,
+  compactAccountInput,
+  copyText,
+  formatAccountNumber,
+  formatMoney,
+  maskAccountInput,
+  payeeLabel,
+  receiptCode,
+  statusLabel,
+} from "../format";
 import { centsToDollars, dollarsToCents } from "../money";
-import { useAccounts, usePayees, useToast } from "../hooks";
+import { useAccounts, usePayees, useSelectedAccount, useToast } from "../hooks";
 import { SavePersonSheet } from "../people";
 import { AmountField, Banner, EmptyState, IconCheck, Page, PageSkeleton, Toast } from "../ui";
 
 export function TransfersPage() {
   const { accounts, error, setError, reload } = useAccounts();
+  const { selected, select } = useSelectedAccount(accounts);
   const { payees, reload: reloadPayees } = usePayees();
   const [searchParams, setSearchParams] = useSearchParams();
   const [toNumber, setToNumber] = useState("");
@@ -29,36 +41,42 @@ export function TransfersPage() {
     note: string;
   } | null>(null);
 
-  const selected = accounts?.[0];
   const blocked = selected != null && selected.status !== "active";
+  const ownNumbers = useMemo(() => (accounts ?? []).map((a) => a.account_number), [accounts]);
   const saved = useMemo(
-    () => (payees ?? []).filter((p) => p.account_number !== selected?.account_number),
-    [payees, selected?.account_number],
+    () =>
+      (payees ?? []).filter(
+        (p) => !ownNumbers.includes(p.account_number) && accountCurrencyOf(p.account_number) === (selected?.currency ?? "USD"),
+      ),
+    [payees, ownNumbers, selected?.currency],
   );
   const cents = dollarsToCents(amount);
-  const ownAccount = selected != null && toNumber === selected.account_number;
+  const ownAccount = ownNumbers.includes(toNumber);
   const leftover =
     selected && cents != null && cents > 0 && cents <= selected.balance_cents ? selected.balance_cents - cents : null;
   const dest = payeeLabel(toNumber, payeeName) || formatAccountNumber(toNumber);
   const alreadySaved = saved.some((p) => p.account_number === toNumber);
+  const destReady = accountLooksReady(toNumber) && accountCurrencyOf(toNumber) === (selected?.currency ?? "");
   const ready =
     !blocked &&
     cents != null &&
     cents > 0 &&
-    toNumber.length === 8 &&
+    destReady &&
     selected != null &&
     !ownAccount &&
     cents <= selected.balance_cents;
 
   useEffect(() => {
-    const to = digitsOnly(searchParams.get("to") ?? "");
-    if (to.length !== 8) return;
+    const from = searchParams.get("from");
+    if (from && accounts?.some((a) => a.id === from)) select(from);
+    const to = compactAccountInput(searchParams.get("to") ?? "");
+    if (!accountLooksReady(to)) return;
     setToNumber(to);
     if (payees == null) return;
     const match = payees.find((p) => p.account_number === to);
     setPayeeName(match && match.display_name !== to ? match.display_name : "");
     setSearchParams({}, { replace: true });
-  }, [searchParams, payees, setSearchParams]);
+  }, [searchParams, payees, accounts, select, setSearchParams]);
 
   function pickPayee(accountNumber: string, displayName: string) {
     setToNumber(accountNumber);
@@ -67,7 +85,10 @@ export function TransfersPage() {
 
   function validate(): string | null {
     if (cents == null || cents <= 0) return "Enter an amount with at most two decimals";
-    if (toNumber.length !== 8) return "Destination is an 8-digit account number";
+    if (!accountLooksReady(toNumber)) return "Enter a valid account number or IBAN";
+    if (selected && accountCurrencyOf(toNumber) !== selected.currency) {
+      return "Destination must be the same currency. Convert first, then send.";
+    }
     if (ownAccount) return "That's your own account";
     if (selected && cents > selected.balance_cents) return "You don't have that much available";
     if (blocked) return "This account cannot send money right now.";
@@ -100,11 +121,11 @@ export function TransfersPage() {
       const res = await createTransfer(selected.id, toNumber, cents, crypto.randomUUID(), payeeName, note);
       const next = await reload();
       await reloadPayees().catch(() => undefined);
-      const left = next[0]?.balance_cents ?? selected.balance_cents - cents;
+      const left = next.find((a) => a.id === selected.id)?.balance_cents ?? selected.balance_cents - cents;
       setSent({
-        amount: formatUSD(cents),
+        amount: formatMoney(cents, selected.currency),
         to: payeeLabel(res.transfer.to_account_number, payeeName) || formatAccountNumber(res.transfer.to_account_number),
-        left: formatUSD(left),
+        left: formatMoney(left, selected.currency),
         journalId: res.transfer.journal_id,
         receipt: receiptCode(res.transfer.journal_id, res.transfer.receipt),
         note: res.transfer.note || note.trim(),
@@ -127,7 +148,7 @@ export function TransfersPage() {
       <Page title="Send">
         <EmptyState
           title="Open an account first"
-          body="You need a USD account before you can send money."
+          body="You need a balance before you can send money."
           action={
             <Link className="btn btn-primary" to="/accounts">
               Go to account
@@ -155,7 +176,7 @@ export function TransfersPage() {
               </>
             ) : null}
             <br />
-            {sent.left} left in your account
+            {sent.left} left in this balance
           </p>
           <div className="review success-receipt">
             <button
@@ -206,13 +227,13 @@ export function TransfersPage() {
           <div className="review">
             <div>
               <span>You send</span>
-              <strong>{formatUSD(cents)}</strong>
+              <strong>{formatMoney(cents, selected.currency)}</strong>
             </div>
             <div>
               <span>To</span>
               <strong>{dest}</strong>
             </div>
-            {toNumber.length === 8 && payeeName.trim() && payeeName.trim() !== toNumber ? (
+            {accountLooksReady(toNumber) && payeeName.trim() && payeeName.trim() !== toNumber ? (
               <div>
                 <span>Account</span>
                 <strong>{formatAccountNumber(toNumber)}</strong>
@@ -226,11 +247,11 @@ export function TransfersPage() {
             ) : null}
             <div>
               <span>Remaining</span>
-              <strong>{formatUSD(selected.balance_cents - cents)}</strong>
+              <strong>{formatMoney(selected.balance_cents - cents, selected.currency)}</strong>
             </div>
           </div>
           <button className="btn btn-primary btn-block" type="submit" disabled={pending}>
-            {pending ? "Sending…" : `Send ${formatUSD(cents)}`}
+            {pending ? "Sending…" : `Send ${formatMoney(cents, selected.currency)}`}
           </button>
           <button className="btn btn-secondary btn-block" type="button" disabled={pending} onClick={() => setStep("edit")}>
             Back
@@ -241,7 +262,7 @@ export function TransfersPage() {
   }
 
   return (
-    <Page title="Send" kicker="USD">
+    <Page title="Send" kicker={selected?.currency ?? ""}>
       {error ? <Banner>{error}</Banner> : null}
       {blocked ? (
         <Banner>
@@ -249,9 +270,23 @@ export function TransfersPage() {
         </Banner>
       ) : null}
       <form className="send-card" onSubmit={onContinue}>
-        <AmountField value={amount} onChange={setAmount} disabled={blocked} autoFocus />
+        {(accounts ?? []).length > 1 ? (
+          <div className="chips">
+            {accounts.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                className={`chip${selected?.id === a.id ? " chip-on" : ""}`}
+                onClick={() => select(a.id)}
+              >
+                {a.currency}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <AmountField value={amount} onChange={setAmount} disabled={blocked} autoFocus currency={selected?.currency} />
         <p className="avail">
-          Available {formatUSD(selected?.balance_cents ?? 0)}
+          Available {formatMoney(selected?.balance_cents ?? 0, selected?.currency)}
           {selected && selected.balance_cents > 0 && !blocked ? (
             <>
               {" · "}
@@ -260,18 +295,17 @@ export function TransfersPage() {
               </button>
             </>
           ) : null}
-          {leftover != null ? ` · ${formatUSD(leftover)} after this send` : null}
+          {leftover != null ? ` · ${formatMoney(leftover, selected?.currency)} after this send` : null}
         </p>
         <label>
           To
           <input
-            className={`digits${ownAccount ? " input-warn" : toNumber.length === 8 ? " input-ok" : ""}`}
+            className={`digits${ownAccount ? " input-warn" : destReady ? " input-ok" : ""}`}
             value={maskAccountInput(toNumber)}
-            onChange={(e) => setToNumber(digitsOnly(e.target.value))}
+            onChange={(e) => setToNumber(compactAccountInput(e.target.value))}
             disabled={blocked}
-            inputMode="numeric"
-            maxLength={11}
-            placeholder="0000 · 0000"
+            maxLength={29}
+            placeholder={selected?.currency === "EUR" ? "GB IBAN" : selected?.currency === "GBP" ? "04-00-04 · account" : "0000 · 0000"}
             autoComplete="off"
             aria-label="Destination account number"
           />
@@ -319,7 +353,7 @@ export function TransfersPage() {
             </button>
           </div>
         ) : null}
-        {toNumber.length === 8 && !ownAccount && !alreadySaved ? (
+        {destReady && !ownAccount && !alreadySaved ? (
           <p className="avail">
             <button type="button" className="text-link" onClick={() => setAdding(true)}>
               Save this person
@@ -327,15 +361,19 @@ export function TransfersPage() {
           </p>
         ) : null}
         <p className={`avail${ownAccount ? " avail-warn" : ""}`}>
-          {ownAccount ? "That's your own account" : `${toNumber.length}/8 digits`}
+          {ownAccount
+            ? "That's your own account"
+            : toNumber && !destReady
+              ? "Same-currency local details only"
+              : "Same currency as the balance you send from"}
         </p>
         <button className="btn btn-primary btn-block" type="submit" disabled={!ready}>
-          {cents != null && cents > 0 ? `Continue · ${formatUSD(cents)}` : "Continue"}
+          {cents != null && cents > 0 ? `Continue · ${formatMoney(cents, selected?.currency)}` : "Continue"}
         </button>
       </form>
       {adding ? (
         <SavePersonSheet
-          ownAccountNumber={selected?.account_number}
+          ownAccountNumbers={ownNumbers}
           initialNumber={toNumber}
           initialName={payeeName}
           onClose={() => setAdding(false)}

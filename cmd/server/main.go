@@ -14,6 +14,7 @@ import (
 	"bank/internal/auth"
 	"bank/internal/config"
 	"bank/internal/db"
+	"bank/internal/fx"
 	"bank/internal/httpapi"
 	"bank/internal/payee"
 	"bank/internal/transfer"
@@ -51,7 +52,8 @@ func run(log *slog.Logger) error {
 	accountH := account.NewHandler(accountSvc, payeeSvc, store)
 	transferH := transfer.NewHandler(transfer.NewService(store), payeeSvc, store)
 	payeeH := payee.NewHandler(payeeSvc)
-	handler := httpapi.New(authH, accountH, transferH, payeeH, cfg.WebDist, log)
+	fxH := fx.NewHandler(fx.NewService(accountSvc, store, fx.NewClient("", nil)), store)
+	handler := httpapi.New(authH, accountH, transferH, payeeH, fxH, cfg.WebDist, log)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

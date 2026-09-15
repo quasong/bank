@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { errorMessage, fundAccount, withdrawAccount, type BankAccount } from "./api";
-import { formatUSD } from "./format";
+import { formatMoney } from "./format";
 import { centsToDollars, dollarsToCents } from "./money";
 import { AmountChips, AmountField, Banner, Sheet } from "./ui";
 
@@ -42,10 +42,10 @@ export function MoneySheet({
     try {
       if (withdraw) {
         await withdrawAccount(account.id, cents, crypto.randomUUID());
-        await onSuccess(`Withdrew ${formatUSD(cents)}`);
+        await onSuccess(`Withdrew ${formatMoney(cents, account.currency)}`);
       } else {
         await fundAccount(account.id, cents, crypto.randomUUID());
-        await onSuccess(`Added ${formatUSD(cents)}`);
+        await onSuccess(`Added ${formatMoney(cents, account.currency)}`);
       }
     } catch (err) {
       setError(errorMessage(err, "Could not complete that"));
@@ -58,10 +58,10 @@ export function MoneySheet({
     <Sheet title={withdraw ? "Withdraw" : "Add money"} onClose={onClose}>
       <form className="stack" onSubmit={onSubmit}>
         {error ? <Banner>{error}</Banner> : null}
-        <AmountField value={amount} onChange={setAmount} autoFocus />
-        <AmountChips values={chips} onPick={(v) => setAmount(centsToDollars(v))} disabled={pending} />
+        <AmountField value={amount} onChange={setAmount} autoFocus currency={account.currency} />
+        <AmountChips values={chips} onPick={(v) => setAmount(centsToDollars(v))} disabled={pending} currency={account.currency} />
         <p className="avail">
-          Available {formatUSD(account.balance_cents)}
+          Available {formatMoney(account.balance_cents, account.currency)}
           {withdraw && account.balance_cents > 0 ? (
             <>
               {" · "}
@@ -72,7 +72,7 @@ export function MoneySheet({
           ) : null}
         </p>
         <button className="btn btn-primary btn-block" type="submit" disabled={pending || !ready}>
-          {pending ? (withdraw ? "Withdrawing…" : "Adding…") : cents != null && ready ? `${label} ${formatUSD(cents)}` : label}
+          {pending ? (withdraw ? "Withdrawing…" : "Adding…") : cents != null && ready ? `${label} ${formatMoney(cents, account.currency)}` : label}
         </button>
       </form>
     </Sheet>

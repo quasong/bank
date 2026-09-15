@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"bank/internal/account"
+	"bank/internal/currency"
 	"bank/internal/ledger"
 )
 
@@ -121,6 +122,33 @@ func TestTransferFrozen(t *testing.T) {
 	}
 	_, err := svc.Execute(ctx, aCust, from.ID, to.AccountNumber, 10, "xfer", "")
 	if !errors.Is(err, account.ErrFrozen) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestTransferRejectsCurrencyMismatch(t *testing.T) {
+	ctx := context.Background()
+	store := account.NewMemStore()
+	accounts := account.NewService(store)
+	svc := NewService(store)
+	aCust := uuid.New()
+	bCust := uuid.New()
+	from, err := accounts.Open(ctx, aCust)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := accounts.Open(ctx, bCust); err != nil {
+		t.Fatal(err)
+	}
+	eur, err := accounts.Open(ctx, bCust, currency.EUR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := accounts.Fund(ctx, aCust, from.ID, 100, "fund"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.Execute(ctx, aCust, from.ID, eur.AccountNumber, 10, "xfer", "")
+	if !errors.Is(err, account.ErrCurrency) {
 		t.Fatalf("got %v", err)
 	}
 }

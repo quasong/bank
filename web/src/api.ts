@@ -32,10 +32,12 @@ const FRIENDLY: Record<string, string> = {
   invalid_credentials: "Incorrect email or password",
   rate_limited: "Too many attempts. Try again in a moment",
   account_locked: "This profile is locked",
-  account_exists: "You already have a USD account",
+  account_exists: "You already have this currency",
   own_account: "That's your own account",
   payee_not_found: "That person isn't saved",
   account_not_found: "No account with that number",
+  currency_mismatch: "Send only works in the same currency",
+  rates_unavailable: "Live rates are unavailable right now",
 };
 
 export function errorMessage(err: unknown, fallback: string): string {
@@ -112,10 +114,13 @@ export function fetchMe() {
 
 export type BankAccount = {
   id: string;
+  currency: string;
   account_number: string;
+  account_number_formatted?: string;
   status: string;
   balance_cents: number;
   opened_at: string;
+  details?: Record<string, string>;
 };
 
 export type ActivityItem = {
@@ -127,6 +132,7 @@ export type ActivityItem = {
   side: string;
   amount_cents: number;
   signed_cents: number;
+  currency?: string;
   counterparty_account_number?: string;
   counterparty_name?: string;
   note?: string;
@@ -151,8 +157,9 @@ export function listAccounts() {
   return request<{ accounts: BankAccount[] }>("/api/v1/accounts");
 }
 
-export function openAccount() {
-  return request<{ account: BankAccount }>("/api/v1/accounts", { method: "POST" });
+export function openAccount(currency?: string) {
+  const body = currency ? JSON.stringify({ currency }) : undefined;
+  return request<{ account: BankAccount }>("/api/v1/accounts", { method: "POST", body });
 }
 
 export function fundAccount(id: string, amountCents: number, idempotencyKey: string) {
@@ -251,4 +258,45 @@ export function listActivity(accountId: string) {
 
 export function listAudit() {
   return request<{ events: AuditEvent[] }>("/api/v1/audit");
+}
+
+export type FXQuote = {
+  from: string;
+  to: string;
+  rate: string;
+  rate_e8: number;
+  as_of: string;
+  amount_cents?: number;
+  quote_cents?: number;
+};
+
+export function quoteFX(from: string, to: string, amountCents?: number) {
+  const q = new URLSearchParams({ from, to });
+  if (amountCents && amountCents > 0) q.set("amount_cents", String(amountCents));
+  return request<{ quote: FXQuote }>(`/api/v1/fx/quote?${q.toString()}`);
+}
+
+export function convertFX(fromAccountId: string, toCurrency: string, amountCents: number, idempotencyKey: string) {
+  return request<{
+    conversion: {
+      journal_id: string;
+      receipt: string;
+      from_currency: string;
+      to_currency: string;
+      amount_cents: number;
+      quote_cents: number;
+      rate: string;
+      as_of: string;
+      replay: boolean;
+      to_account_id: string;
+    };
+  }>("/api/v1/fx", {
+    method: "POST",
+    body: JSON.stringify({
+      from_account_id: fromAccountId,
+      to_currency: toCurrency,
+      amount_cents: amountCents,
+      idempotency_key: idempotencyKey,
+    }),
+  });
 }

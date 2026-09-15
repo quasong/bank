@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { createPayee, deletePayee, errorMessage, updatePayee, type Payee } from "./api";
-import { digitsOnly, formatAccountNumber, maskAccountInput, payeeLabel } from "./format";
+import { accountLooksReady, compactAccountInput, formatAccountNumber, maskAccountInput, payeeLabel } from "./format";
 import { usePayees } from "./hooks";
 import { Banner, Sheet } from "./ui";
 
@@ -9,29 +9,29 @@ function nickname(p: Payee): string {
 }
 
 export function SavePersonSheet({
-  ownAccountNumber,
+  ownAccountNumbers = [],
   initialNumber = "",
   initialName = "",
   onClose,
   onSaved,
 }: {
-  ownAccountNumber?: string;
+  ownAccountNumbers?: string[];
   initialNumber?: string;
   initialName?: string;
   onClose: () => void;
   onSaved: (payee: Payee) => void;
 }) {
-  const [toNumber, setToNumber] = useState(digitsOnly(initialNumber));
+  const [toNumber, setToNumber] = useState(compactAccountInput(initialNumber));
   const [name, setName] = useState(initialName.slice(0, 40));
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const ownAccount = Boolean(ownAccountNumber) && toNumber === ownAccountNumber;
-  const ready = toNumber.length === 8 && !ownAccount;
+  const ownAccount = ownAccountNumbers.includes(toNumber);
+  const ready = accountLooksReady(toNumber) && !ownAccount;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!ready) {
-      setError(ownAccount ? "That's your own account" : "Destination is an 8-digit account number");
+      setError(ownAccount ? "That's your own account" : "Enter a valid account number or IBAN");
       return;
     }
     setError("");
@@ -53,12 +53,11 @@ export function SavePersonSheet({
         <label>
           Account
           <input
-            className={`digits${ownAccount ? " input-warn" : toNumber.length === 8 ? " input-ok" : ""}`}
+            className={`digits${ownAccount ? " input-warn" : accountLooksReady(toNumber) ? " input-ok" : ""}`}
             value={maskAccountInput(toNumber)}
-            onChange={(e) => setToNumber(digitsOnly(e.target.value))}
-            inputMode="numeric"
-            maxLength={11}
-            placeholder="0000 · 0000"
+            onChange={(e) => setToNumber(compactAccountInput(e.target.value))}
+            maxLength={29}
+            placeholder="Account or IBAN"
             autoComplete="off"
             autoFocus
             aria-label="Account number to save"
@@ -76,7 +75,7 @@ export function SavePersonSheet({
           />
         </label>
         <p className={`avail${ownAccount ? " avail-warn" : ""}`}>
-          {ownAccount ? "That's your own account" : `${toNumber.length}/8 digits`}
+          {ownAccount ? "That's your own account" : "USD 8 digits, GBP sort code, or GB IBAN"}
         </p>
         <button className="btn btn-primary btn-block" type="submit" disabled={pending || !ready}>
           {pending ? "Saving…" : "Save"}
@@ -87,11 +86,11 @@ export function SavePersonSheet({
 }
 
 export function PeoplePanel({
-  ownAccountNumber,
+  ownAccountNumbers = [],
   onToast,
   onSendTo,
 }: {
-  ownAccountNumber?: string;
+  ownAccountNumbers?: string[];
   onToast: (text: string) => void;
   onSendTo?: (accountNumber: string, displayName: string) => void;
 }) {
@@ -102,7 +101,7 @@ export function PeoplePanel({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const saved = (payees ?? []).filter((p) => p.account_number !== ownAccountNumber);
+  const saved = (payees ?? []).filter((p) => !ownAccountNumbers.includes(p.account_number));
 
   async function onRename(e: FormEvent) {
     e.preventDefault();
@@ -174,7 +173,7 @@ export function PeoplePanel({
 
       {adding ? (
         <SavePersonSheet
-          ownAccountNumber={ownAccountNumber}
+          ownAccountNumbers={ownAccountNumbers}
           onClose={() => setAdding(false)}
           onSaved={async () => {
             await reload();

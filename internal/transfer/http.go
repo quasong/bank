@@ -87,6 +87,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			"account_id":        res.From.ID.String(),
 			"account_number":    res.From.AccountNumber,
 			"to_account_number": res.To.AccountNumber,
+			"currency":          string(res.From.Currency),
 			"amount_cents":      strconv.FormatInt(res.AmountCents, 10),
 			"journal_id":        res.Journal.ID.String(),
 		}
@@ -119,6 +120,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		"from_account_id":     res.From.ID.String(),
 		"from_account_number": res.From.AccountNumber,
 		"from_balance_cents":  res.From.BalanceCents,
+		"from_currency":       string(res.From.Currency),
 		"to_account_id":       res.To.ID.String(),
 		"to_account_number":   res.To.AccountNumber,
 		"created_at":          created,

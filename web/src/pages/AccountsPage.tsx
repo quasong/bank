@@ -1,24 +1,28 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { closeAccount, errorMessage, freezeAccount, openAccount, unfreezeAccount } from "../api";
-import { auditAmount, auditLabel, copyText, formatAccountNumber, openedLabel, recentWhen } from "../format";
-import { useAccounts, useAudit, useToast } from "../hooks";
+import { CURRENCIES, auditAmount, auditLabel, copyText, formatAccountNumber, openedLabel, recentWhen } from "../format";
+import { useAccounts, useAudit, useSelectedAccount, useToast } from "../hooks";
 import { MoneySheet } from "../moneyflow";
 import { PeoplePanel } from "../people";
-import { AccountHero, Banner, EmptyState, IconArrow, IconFreeze, IconMinus, IconPlus, Page, PageSkeleton, Sheet, Toast } from "../ui";
+import { AccountHero, Banner, EmptyState, IconArrow, IconFreeze, IconMinus, IconPlus, IconSwap, Page, PageSkeleton, Sheet, Toast } from "../ui";
 
 type MoneyKind = "fund" | "withdraw";
 
 export function AccountsPage() {
   const { accounts, error, setError, reload } = useAccounts();
+  const { selected, select } = useSelectedAccount(accounts);
   const { events, reload: reloadAudit } = useAudit();
   const { text: toast, show } = useToast();
   const [pending, setPending] = useState(false);
   const [form, setForm] = useState<MoneyKind | null>(null);
   const [closing, setClosing] = useState(false);
   const [freezing, setFreezing] = useState(false);
+  const [adding, setAdding] = useState(false);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const missing = CURRENCIES.filter((c) => !(accounts ?? []).some((a) => a.currency === c));
+  const ownNumbers = (accounts ?? []).map((a) => a.account_number);
 
   useEffect(() => {
     const action = searchParams.get("action");
@@ -28,13 +32,15 @@ export function AccountsPage() {
     }
   }, [searchParams, setSearchParams]);
 
-  async function onOpen() {
+  async function onOpen(currency?: string) {
     setError("");
     setPending(true);
     try {
-      await openAccount();
+      const res = await openAccount(currency);
       await reload();
-      show("Account opened");
+      select(res.account.id);
+      show(`${res.account.currency} opened`);
+      setAdding(false);
       await reloadAudit().catch(() => undefined);
     } catch (err) {
       setError(errorMessage(err, "Could not open account"));
@@ -71,23 +77,37 @@ export function AccountsPage() {
     return <PageSkeleton />;
   }
 
-  const acct = accounts[0];
+  const acct = selected;
 
   return (
-    <Page title="Account" kicker="USD">
+    <Page title="Account" kicker={acct?.currency ?? "Balances"}>
       {error ? <Banner>{error}</Banner> : null}
       {!acct ? (
         <EmptyState
           title="No account yet"
-          body="Open a USD account to hold a balance."
+          body="Open a USD account to hold a balance. You can add euros and pounds next."
           action={
-            <button className="btn btn-primary" type="button" disabled={pending} onClick={onOpen}>
+            <button className="btn btn-primary" type="button" disabled={pending} onClick={() => void onOpen()}>
               {pending ? "Opening…" : "Open account"}
             </button>
           }
         />
       ) : (
         <>
+          {accounts.length > 1 ? (
+            <div className="chips">
+              {accounts.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  className={`chip${a.id === acct.id ? " chip-on" : ""}`}
+                  onClick={() => select(a.id)}
+                >
+                  {a.currency}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <AccountHero account={acct} onCopied={() => show("Copied account number")} />
           {acct.status === "active" ? (
             <div className="quicks">
@@ -108,6 +128,12 @@ export function AccountsPage() {
                   <IconArrow />
                 </span>
                 Send
+              </button>
+              <button className="quick" type="button" onClick={() => navigate("/convert")}>
+                <span className="quick-icon">
+                  <IconSwap />
+                </span>
+                Convert
               </button>
               <button className="quick" type="button" disabled={pending} onClick={() => setFreezing(true)}>
                 <span className="quick-icon">
@@ -142,16 +168,75 @@ export function AccountsPage() {
                 show("Copied account number");
               }}
             >
-              <span>Account number</span>
-              <strong>{formatAccountNumber(acct.account_number)}</strong>
+              <span>{acct.currency === "EUR" ? "IBAN" : "Account number"}</span>
+              <strong>{acct.account_number_formatted || formatAccountNumber(acct.account_number)}</strong>
             </button>
+            {acct.details?.routing_number ? (
+              <button
+                type="button"
+                className="fact"
+                onClick={() => {
+                  void copyText(acct.details?.routing_number ?? "");
+                  show("Copied routing number");
+                }}
+              >
+                <span>ACH routing</span>
+                <strong>{acct.details.routing_number}</strong>
+              </button>
+            ) : null}
+            {acct.details?.sort_code ? (
+              <button
+                type="button"
+                className="fact"
+                onClick={() => {
+                  void copyText(acct.details?.sort_code ?? "");
+                  show("Copied sort code");
+                }}
+              >
+                <span>Sort code</span>
+                <strong>{acct.details.sort_code}</strong>
+              </button>
+            ) : null}
+            {acct.details?.account && acct.currency !== "USD" ? (
+              <button
+                type="button"
+                className="fact"
+                onClick={() => {
+                  void copyText(acct.details?.account ?? "");
+                  show("Copied account");
+                }}
+              >
+                <span>Local account</span>
+                <strong>{acct.details.account}</strong>
+              </button>
+            ) : null}
+            {acct.details?.bic ? (
+              <button
+                type="button"
+                className="fact"
+                onClick={() => {
+                  void copyText(acct.details?.bic ?? "");
+                  show("Copied BIC");
+                }}
+              >
+                <span>BIC</span>
+                <strong>{acct.details.bic}</strong>
+              </button>
+            ) : null}
             <div className="fact">
               <span>Opened</span>
               <strong>{openedLabel(acct.opened_at)}</strong>
             </div>
           </section>
+          {missing.length > 0 ? (
+            <div className="manage">
+              <button className="btn btn-secondary" type="button" onClick={() => setAdding(true)}>
+                Add currency
+              </button>
+            </div>
+          ) : null}
           <PeoplePanel
-            ownAccountNumber={acct.account_number}
+            ownAccountNumbers={ownNumbers}
             onToast={show}
             onSendTo={(number) => navigate(`/transfers?to=${number}`)}
           />
@@ -189,9 +274,22 @@ export function AccountsPage() {
         <MoneySheet kind={form} account={acct} onClose={() => setForm(null)} onSuccess={onMoneySuccess} />
       ) : null}
 
+      {adding ? (
+        <Sheet title="Add a currency" onClose={() => setAdding(false)}>
+          <p className="sheet-copy">Each currency gets its own local details, like Wise or Revolut.</p>
+          <div className="sheet-actions col">
+            {missing.map((ccy) => (
+              <button key={ccy} className="btn btn-primary btn-block" type="button" disabled={pending} onClick={() => void onOpen(ccy)}>
+                Open {ccy}
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      ) : null}
+
       {freezing && acct ? (
         <Sheet title="Freeze this account?" onClose={() => setFreezing(false)}>
-          <p className="sheet-copy">You won't be able to add, withdraw, or send until you unfreeze it.</p>
+          <p className="sheet-copy">You won't be able to add, withdraw, send, or convert until you unfreeze it.</p>
           <div className="sheet-actions">
             <button className="btn btn-secondary" type="button" onClick={() => setFreezing(false)}>
               Keep it active

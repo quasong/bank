@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"bank/internal/account"
+	"bank/internal/currency"
 	"bank/internal/ledger"
 )
 
@@ -36,12 +37,9 @@ func (s *Service) Execute(ctx context.Context, customerID, fromID uuid.UUID, toN
 		return Result{}, account.ErrIdempotency
 	}
 	toNumber = strings.TrimSpace(toNumber)
-	if !account.ValidAccountNumber(toNumber) {
+	canonical, destCCY, ok := currency.Normalize(toNumber)
+	if !ok {
 		return Result{}, account.ErrInvalidRequest
-	}
-	note, err := ledger.NormalizeNote(note)
-	if err != nil {
-		return Result{}, err
 	}
 
 	from, err := s.store.GetByID(ctx, fromID)
@@ -51,12 +49,19 @@ func (s *Service) Execute(ctx context.Context, customerID, fromID uuid.UUID, toN
 	if from.CustomerID != customerID {
 		return Result{}, account.ErrNotFound
 	}
-	to, err := s.store.GetByNumber(ctx, toNumber)
+	to, err := s.store.GetByNumber(ctx, canonical)
 	if err != nil {
 		return Result{}, err
 	}
 	if from.ID == to.ID {
 		return Result{}, account.ErrSameAccount
+	}
+	if from.Currency != to.Currency || from.Currency != destCCY {
+		return Result{}, account.ErrCurrency
+	}
+	note, err = ledger.NormalizeNote(note)
+	if err != nil {
+		return Result{}, err
 	}
 	if err := from.Status.MoneyError(); err != nil {
 		return Result{}, err
@@ -70,13 +75,13 @@ func (s *Service) Execute(ctx context.Context, customerID, fromID uuid.UUID, toN
 
 	j := ledger.Journal{
 		ID:             uuid.New(),
-		Description:    fmt.Sprintf("Transfer %d cents from %s to %s", amountCents, from.AccountNumber, to.AccountNumber),
+		Description:    fmt.Sprintf("Transfer %d %s from %s to %s", amountCents, from.Currency, from.AccountNumber, to.AccountNumber),
 		Note:           note,
 		Kind:           ledger.KindTransfer,
 		IdempotencyKey: key,
 		Lines: []ledger.Line{
-			{LedgerAccountID: from.LedgerID, Side: ledger.Debit, AmountCents: amountCents},
-			{LedgerAccountID: to.LedgerID, Side: ledger.Credit, AmountCents: amountCents},
+			{LedgerAccountID: from.LedgerID, Side: ledger.Debit, AmountCents: amountCents, Currency: from.Currency},
+			{LedgerAccountID: to.LedgerID, Side: ledger.Credit, AmountCents: amountCents, Currency: to.Currency},
 		},
 	}
 	posted, replay, err := s.store.Post(ctx, j, map[uuid.UUID]int64{

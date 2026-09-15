@@ -1,6 +1,6 @@
 -- name: InsertLedgerAccount :exec
-INSERT INTO ledger_accounts (id, name, kind, account_id)
-VALUES ($1, $2, $3, $4);
+INSERT INTO ledger_accounts (id, name, kind, currency, account_id)
+VALUES ($1, $2, $3, $4, $5);
 
 -- name: GetLedgerAccountByDeposit :one
 SELECT id, name, kind, account_id, created_at

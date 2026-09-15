@@ -8,6 +8,7 @@ const (
 	Funding         = "funding"
 	Withdrawal      = "withdrawal"
 	Transfer        = "transfer"
+	FX              = "fx"
 	AccountFreeze   = "account_freeze"
 	AccountUnfreeze = "account_unfreeze"
 	AccountClose    = "account_close"

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"bank/internal/currency"
 	"bank/internal/ledger"
 )
 
@@ -30,8 +31,11 @@ func NewMemStore() *MemStore {
 func (m *MemStore) OpenDeposit(_ context.Context, acct Account) (Account, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if acct.Currency == "" {
+		acct.Currency = currency.USD
+	}
 	for _, existing := range m.accounts {
-		if existing.CustomerID == acct.CustomerID {
+		if existing.CustomerID == acct.CustomerID && existing.Currency == acct.Currency {
 			return Account{}, ErrExists
 		}
 		if existing.AccountNumber == acct.AccountNumber {
@@ -54,11 +58,14 @@ func (m *MemStore) GetByID(_ context.Context, id uuid.UUID) (Account, error) {
 	return a, nil
 }
 
-func (m *MemStore) GetByCustomer(_ context.Context, customerID uuid.UUID) (Account, error) {
+func (m *MemStore) GetByCustomerCurrency(_ context.Context, customerID uuid.UUID, ccy currency.Code) (Account, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if ccy == "" {
+		ccy = currency.USD
+	}
 	for _, a := range m.accounts {
-		if a.CustomerID == customerID {
+		if a.CustomerID == customerID && a.Currency == ccy {
 			return a, nil
 		}
 	}
@@ -68,8 +75,12 @@ func (m *MemStore) GetByCustomer(_ context.Context, customerID uuid.UUID) (Accou
 func (m *MemStore) GetByNumber(_ context.Context, number string) (Account, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	n, _, ok := currency.Normalize(number)
+	if !ok {
+		return Account{}, ErrNotFound
+	}
 	for _, a := range m.accounts {
-		if a.AccountNumber == number {
+		if a.AccountNumber == n {
 			return a, nil
 		}
 	}
@@ -85,6 +96,13 @@ func (m *MemStore) ListByCustomer(_ context.Context, customerID uuid.UUID) ([]Ac
 			out = append(out, a)
 		}
 	}
+	sort.Slice(out, func(i, j int) bool {
+		ri, rj := out[i].Currency.Rank(), out[j].Currency.Rank()
+		if ri != rj {
+			return ri < rj
+		}
+		return out[i].OpenedAt.Before(out[j].OpenedAt)
+	})
 	if out == nil {
 		out = []Account{}
 	}

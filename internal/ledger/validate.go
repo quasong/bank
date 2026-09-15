@@ -4,6 +4,8 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+
+	"bank/internal/currency"
 )
 
 var (
@@ -18,7 +20,8 @@ func Validate(lines []Line) error {
 	if len(lines) < 2 {
 		return ErrUnbalanced
 	}
-	var debit, credit int64
+	type tot struct{ debit, credit int64 }
+	by := map[currency.Code]*tot{}
 	for _, ln := range lines {
 		if ln.LedgerAccountID == uuid.Nil {
 			return ErrInvalidLine
@@ -26,17 +29,25 @@ func Validate(lines []Line) error {
 		if ln.AmountCents <= 0 {
 			return ErrInvalidAmount
 		}
+		cc := ln.Currency
+		t := by[cc]
+		if t == nil {
+			t = &tot{}
+			by[cc] = t
+		}
 		switch ln.Side {
 		case Debit:
-			debit += ln.AmountCents
+			t.debit += ln.AmountCents
 		case Credit:
-			credit += ln.AmountCents
+			t.credit += ln.AmountCents
 		default:
 			return ErrInvalidLine
 		}
 	}
-	if debit != credit {
-		return ErrUnbalanced
+	for _, t := range by {
+		if t.debit != t.credit {
+			return ErrUnbalanced
+		}
 	}
 	return nil
 }

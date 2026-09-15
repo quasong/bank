@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"bank/internal/currency"
 )
 
 type Status string
@@ -61,6 +63,7 @@ func Transition(acct Account, want Status) (Status, error) {
 type Account struct {
 	ID            uuid.UUID
 	CustomerID    uuid.UUID
+	Currency      currency.Code
 	AccountNumber string
 	Status        Status
 	BalanceCents  int64

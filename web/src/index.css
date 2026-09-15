@@ -417,6 +417,41 @@ a.btn {
   opacity: 0.86;
 }
 
+.wallets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 8px;
+  margin: 16px 0 4px;
+}
+
+.wallet {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.wallet.on {
+  border-color: var(--ink);
+}
+
+.wallet.add {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.wallet .money {
+  font-variant-numeric: tabular-nums;
+}
+
 .hero-card .pill {
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
@@ -597,6 +632,10 @@ button.fact {
   gap: 8px;
 }
 
+.sheet-actions.col {
+  grid-template-columns: 1fr;
+}
+
 .detail-amt {
   margin: 0 0 8px;
   font-size: 32px;
@@ -664,7 +703,7 @@ button.fact {
 
 .quicks {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
   gap: 10px;
   margin: 18px 0 28px;
 }
@@ -1339,12 +1378,12 @@ button.fact {
   }
 
   .quicks {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
   }
 
   .tabbar {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     position: fixed;
     left: 0;
     right: 0;

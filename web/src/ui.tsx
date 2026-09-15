@@ -7,7 +7,8 @@ import {
   copyText,
   dateTimeLabel,
   formatAccountNumber,
-  formatUSD,
+  formatMoney,
+  currencySymbol,
   payeeDetail,
   receiptCode,
   recentWhen,
@@ -109,6 +110,14 @@ export function IconFreeze() {
   );
 }
 
+export function IconSwap() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 7h11M15 4l3 3-3 3M17 17H6M9 14l-3 3 3 3" />
+    </svg>
+  );
+}
+
 export function IconArrow() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -139,11 +148,21 @@ export function StatusPill({ status }: { status: string }) {
   return <span className={`pill pill-${status}`}>{statusLabel(status)}</span>;
 }
 
-export function MoneyText({ cents, signed = false, reveal = false }: { cents: number; signed?: boolean; reveal?: boolean }) {
+export function MoneyText({
+  cents,
+  currency = "USD",
+  signed = false,
+  reveal = false,
+}: {
+  cents: number;
+  currency?: string;
+  signed?: boolean;
+  reveal?: boolean;
+}) {
   const { hidden } = useHideBalance();
   if (hidden && !reveal) return <span className="money amt-mask">••••</span>;
   const cls = signed ? (cents > 0 ? "amt-in" : cents < 0 ? "amt-out" : "amt") : "amt";
-  const text = signed && cents > 0 ? `+${formatUSD(cents)}` : formatUSD(cents);
+  const text = signed && cents > 0 ? `+${formatMoney(cents, currency)}` : formatMoney(cents, currency);
   return <span className={`money ${cls}`}>{text}</span>;
 }
 
@@ -182,6 +201,8 @@ export function AccountHero({ account, onCopied }: { account: BankAccount; onCop
   const [copied, setCopied] = useState(false);
   const { hidden, toggle } = useHideBalance();
   const parts = usdParts(account.balance_cents);
+  const ccy = account.currency || "USD";
+  const formatted = account.account_number_formatted || formatAccountNumber(account.account_number);
 
   async function copy() {
     void copyText(account.account_number);
@@ -197,9 +218,9 @@ export function AccountHero({ account, onCopied }: { account: BankAccount; onCop
           type="button"
           className={`hero-copy${copied ? " copied" : ""}`}
           onClick={copy}
-          aria-label={`Copy account number ${formatAccountNumber(account.account_number)}`}
+          aria-label={`Copy account number ${formatted}`}
         >
-          USD · {formatAccountNumber(account.account_number)}
+          {ccy} · {formatted}
           <em>{copied ? "Copied" : "Copy"}</em>
         </button>
         <StatusPill status={account.status} />
@@ -220,7 +241,9 @@ export function AccountHero({ account, onCopied }: { account: BankAccount; onCop
           <span className="hero-dots">••••</span>
         ) : (
           <>
-            {parts.sign}${parts.dollars}
+            {parts.sign}
+            {currencySymbol(ccy)}
+            {parts.dollars}
             <span className="hero-cents">.{parts.frac}</span>
           </>
         )}
@@ -310,17 +333,19 @@ export function AmountField({
   onChange,
   disabled,
   autoFocus,
+  currency = "USD",
 }: {
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
   autoFocus?: boolean;
+  currency?: string;
 }) {
   return (
     <label className="amount-field">
       <span>Amount</span>
       <div className="amount-row">
-        <span className="amount-ccy">$</span>
+        <span className="amount-ccy">{currencySymbol(currency)}</span>
         <input
           value={value}
           onChange={(e) => onChange(sanitizeAmount(e.target.value))}
@@ -373,7 +398,7 @@ export function TxnRow({ item, onOpen }: { item: ActivityItem; onOpen?: (item: A
           · {recentWhen(item.created_at)}
         </span>
       </div>
-      <MoneyText cents={item.signed_cents} signed />
+      <MoneyText cents={item.signed_cents} currency={item.currency} signed />
     </>
   );
   if (onOpen) {
@@ -401,7 +426,7 @@ export function TxnDetail({ item, onClose }: { item: ActivityItem; onClose: () =
   return (
     <Sheet title={activityTitle(item.kind, item.signed_cents)} onClose={onClose}>
       <p className="detail-amt">
-        <MoneyText cents={item.signed_cents} signed reveal />
+        <MoneyText cents={item.signed_cents} currency={item.currency} signed reveal />
       </p>
       <div className="review">
         <div>
@@ -437,17 +462,19 @@ export function AmountChips({
   values,
   onPick,
   disabled,
+  currency = "USD",
 }: {
   values: number[];
   onPick: (cents: number) => void;
   disabled?: boolean;
+  currency?: string;
 }) {
   if (values.length === 0) return null;
   return (
     <div className="chips">
       {values.map((cents) => (
         <button key={cents} type="button" className="chip" disabled={disabled} onClick={() => onPick(cents)}>
-          {cents % 100 === 0 ? `$${usdParts(cents).dollars}` : formatUSD(cents)}
+          {cents % 100 === 0 ? `${currencySymbol(currency)}${usdParts(cents).dollars}` : formatMoney(cents, currency)}
         </button>
       ))}
     </div>

@@ -7,12 +7,45 @@ import (
 
 	"github.com/google/uuid"
 
+	"bank/internal/currency"
 	"bank/internal/ledger"
 )
 
 func TestValidAccountNumber(t *testing.T) {
 	if !ValidAccountNumber("01234567") || ValidAccountNumber("TB012345") || ValidAccountNumber("1234567") || ValidAccountNumber("123456789") {
-		t.Fatal("expected exactly eight digits")
+		t.Fatal("usd format")
+	}
+	gbp, err := currency.Issue(currency.GBP, "01234567")
+	if err != nil || !ValidAccountNumber(gbp) {
+		t.Fatal("gbp")
+	}
+	eur, err := currency.Issue(currency.EUR, "01234567")
+	if err != nil || !ValidAccountNumber(eur) || !ValidAccountNumber(currency.Format(eur)) {
+		t.Fatal("eur")
+	}
+}
+
+func TestOpenSecondCurrencySharesCore(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemStore()
+	svc := NewService(store)
+	cid := uuid.New()
+	usd, err := svc.Open(ctx, cid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eur, err := svc.Open(ctx, cid, currency.EUR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usd.Currency != currency.USD || eur.Currency != currency.EUR {
+		t.Fatalf("%s %s", usd.Currency, eur.Currency)
+	}
+	if currency.Core(usd.AccountNumber) != currency.Core(eur.AccountNumber) {
+		t.Fatalf("core %s vs %s", usd.AccountNumber, eur.AccountNumber)
+	}
+	if _, err := svc.Open(ctx, cid, currency.EUR); !errors.Is(err, ErrExists) {
+		t.Fatalf("dup eur: %v", err)
 	}
 }
 

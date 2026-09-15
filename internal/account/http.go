@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 	"bank/internal/audit"
 	"bank/internal/auth"
+	"bank/internal/currency"
 	"bank/internal/ledger"
 	"bank/internal/moneyjson"
 )
@@ -38,11 +40,14 @@ func NewHandler(svc *Service, names PayeeNames, auditor Auditor) *Handler {
 }
 
 type accountBody struct {
-	ID            string `json:"id"`
-	AccountNumber string `json:"account_number"`
-	Status        string `json:"status"`
-	BalanceCents  int64  `json:"balance_cents"`
-	OpenedAt      string `json:"opened_at"`
+	ID                     string            `json:"id"`
+	Currency               string            `json:"currency"`
+	AccountNumber          string            `json:"account_number"`
+	AccountNumberFormatted string            `json:"account_number_formatted"`
+	Status                 string            `json:"status"`
+	BalanceCents           int64             `json:"balance_cents"`
+	OpenedAt               string            `json:"opened_at"`
+	Details                map[string]string `json:"details"`
 }
 
 type journalBody struct {
@@ -59,7 +64,21 @@ func (h *Handler) Open(w http.ResponseWriter, r *http.Request) {
 		auth.WriteError(w, http.StatusUnauthorized, "unauthorized", "please sign in again")
 		return
 	}
-	acct, err := h.svc.Open(r.Context(), customerID)
+	var codes []currency.Code
+	raw := map[string]json.RawMessage{}
+	if err := moneyjson.Decode(r.Body, &raw); err != nil && !errors.Is(err, io.EOF) {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+		return
+	}
+	if s, err := moneyjson.String(raw["currency"]); err == nil && strings.TrimSpace(s) != "" {
+		ccy, ok := currency.Parse(s)
+		if !ok {
+			auth.WriteError(w, http.StatusBadRequest, "invalid_request", "unsupported currency")
+			return
+		}
+		codes = []currency.Code{ccy}
+	}
+	acct, err := h.svc.Open(r.Context(), customerID, codes...)
 	if err != nil {
 		writeAccountError(w, err)
 		return
@@ -220,6 +239,11 @@ func (h *Handler) Activity(w http.ResponseWriter, r *http.Request) {
 			offset = int32(n)
 		}
 	}
+	acct, err := h.svc.GetOwned(r.Context(), customerID, acctID)
+	if err != nil {
+		writeAccountError(w, err)
+		return
+	}
 	items, err := h.svc.Activity(r.Context(), customerID, acctID, limit, offset)
 	if err != nil {
 		writeAccountError(w, err)
@@ -240,6 +264,7 @@ func (h *Handler) Activity(w http.ResponseWriter, r *http.Request) {
 			"side":         string(e.Side),
 			"amount_cents": e.AmountCents,
 			"signed_cents": e.SignedCents,
+			"currency":     string(acct.Currency),
 		}
 		if e.Note != "" {
 			item["note"] = e.Note
@@ -270,12 +295,28 @@ func pathAccount(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, 
 }
 
 func toAccountBody(a Account) accountBody {
+	details := map[string]string{}
+	switch a.Currency {
+	case currency.GBP:
+		details["sort_code"] = currency.SortDisplay()
+		details["account"] = currency.LocalAccount(a.AccountNumber)
+		details["bic"] = currency.BIC
+	case currency.EUR:
+		details["iban"] = a.AccountNumber
+		details["bic"] = currency.BIC
+	default:
+		details["routing_number"] = currency.RoutingABA
+		details["account"] = a.AccountNumber
+	}
 	return accountBody{
-		ID:            a.ID.String(),
-		AccountNumber: a.AccountNumber,
-		Status:        string(a.Status),
-		BalanceCents:  a.BalanceCents,
-		OpenedAt:      a.OpenedAt.UTC().Format(time.RFC3339),
+		ID:                     a.ID.String(),
+		Currency:               string(a.Currency),
+		AccountNumber:          a.AccountNumber,
+		AccountNumberFormatted: currency.Format(a.AccountNumber),
+		Status:                 string(a.Status),
+		BalanceCents:           a.BalanceCents,
+		OpenedAt:               a.OpenedAt.UTC().Format(time.RFC3339),
+		Details:                details,
 	}
 }
 
@@ -306,6 +347,7 @@ func (h *Handler) recordMoney(r *http.Request, customerID uuid.UUID, action stri
 		Metadata: map[string]string{
 			"account_id":     acct.ID.String(),
 			"account_number": acct.AccountNumber,
+			"currency":       string(acct.Currency),
 			"amount_cents":   strconv.FormatInt(amountCents, 10),
 			"journal_id":     journal.ID.String(),
 		},
@@ -325,6 +367,7 @@ func (h *Handler) recordStatus(r *http.Request, customerID uuid.UUID, action str
 		Metadata: map[string]string{
 			"account_id":     acct.ID.String(),
 			"account_number": acct.AccountNumber,
+			"currency":       string(acct.Currency),
 			"status":         string(acct.Status),
 		},
 	})
@@ -335,7 +378,11 @@ func writeAccountError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrInvalidRequest), errors.Is(err, ErrInvalidAmount), errors.Is(err, ErrIdempotency), errors.Is(err, ledger.ErrInvalidAmount), errors.Is(err, ledger.ErrUnbalanced), errors.Is(err, ledger.ErrIdempotency), errors.Is(err, ledger.ErrInvalidNote):
 		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid request")
 	case errors.Is(err, ErrExists):
-		auth.WriteError(w, http.StatusConflict, "account_exists", "a deposit account already exists")
+		auth.WriteError(w, http.StatusConflict, "account_exists", "this currency is already open")
+	case errors.Is(err, ErrCurrency):
+		auth.WriteError(w, http.StatusBadRequest, "currency_mismatch", "send only works in the same currency")
+	case errors.Is(err, ErrRates):
+		auth.WriteError(w, http.StatusServiceUnavailable, "rates_unavailable", "live rates are unavailable")
 	case errors.Is(err, ErrNotFound):
 		auth.WriteError(w, http.StatusNotFound, "account_not_found", "account not found")
 	case errors.Is(err, ErrFrozen):

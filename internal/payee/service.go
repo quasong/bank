@@ -2,13 +2,13 @@ package payee
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 
 	"bank/internal/account"
+	"bank/internal/currency"
 )
 
 type Store interface {
@@ -19,7 +19,6 @@ type Store interface {
 }
 
 type Directory interface {
-	GetByCustomer(ctx context.Context, customerID uuid.UUID) (account.Account, error)
 	GetByNumber(ctx context.Context, number string) (account.Account, error)
 }
 
@@ -63,18 +62,15 @@ func (s *Service) Upsert(ctx context.Context, customerID uuid.UUID, accountNumbe
 		return Payee{}, ErrInvalidRequest
 	}
 	accountNumber = strings.TrimSpace(accountNumber)
-	if !account.ValidAccountNumber(accountNumber) {
+	canonical, _, ok := currency.Normalize(accountNumber)
+	if !ok {
 		return Payee{}, ErrInvalidRequest
 	}
-	dest, err := s.accounts.GetByNumber(ctx, accountNumber)
+	dest, err := s.accounts.GetByNumber(ctx, canonical)
 	if err != nil {
 		return Payee{}, err
 	}
-	own, err := s.accounts.GetByCustomer(ctx, customerID)
-	if err != nil && !errors.Is(err, account.ErrNotFound) {
-		return Payee{}, err
-	}
-	if err == nil && own.ID == dest.ID {
+	if dest.CustomerID == customerID {
 		return Payee{}, ErrOwnAccount
 	}
 	name, provided, err := normalizeName(displayName)
@@ -82,9 +78,9 @@ func (s *Service) Upsert(ctx context.Context, customerID uuid.UUID, accountNumbe
 		return Payee{}, err
 	}
 	if !provided {
-		name = accountNumber
+		name = dest.AccountNumber
 	}
-	return s.store.UpsertPayee(ctx, customerID, accountNumber, name, provided)
+	return s.store.UpsertPayee(ctx, customerID, dest.AccountNumber, name, provided)
 }
 
 func (s *Service) Rename(ctx context.Context, customerID, id uuid.UUID, displayName string) (Payee, error) {

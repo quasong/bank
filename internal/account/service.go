@@ -9,13 +9,14 @@ import (
 
 	"github.com/google/uuid"
 
+	"bank/internal/currency"
 	"bank/internal/ledger"
 )
 
 type Store interface {
 	OpenDeposit(ctx context.Context, acct Account) (Account, error)
 	GetByID(ctx context.Context, id uuid.UUID) (Account, error)
-	GetByCustomer(ctx context.Context, customerID uuid.UUID) (Account, error)
+	GetByCustomerCurrency(ctx context.Context, customerID uuid.UUID, ccy currency.Code) (Account, error)
 	GetByNumber(ctx context.Context, number string) (Account, error)
 	ListByCustomer(ctx context.Context, customerID uuid.UUID) ([]Account, error)
 	SetStatus(ctx context.Context, id uuid.UUID, next Status) (Account, error)
@@ -31,24 +32,42 @@ func NewService(store Store) *Service {
 	return &Service{store: store}
 }
 
-func (s *Service) Open(ctx context.Context, customerID uuid.UUID) (Account, error) {
+func (s *Service) Open(ctx context.Context, customerID uuid.UUID, codes ...currency.Code) (Account, error) {
 	if customerID == uuid.Nil {
 		return Account{}, ErrInvalidRequest
 	}
-	if _, err := s.store.GetByCustomer(ctx, customerID); err == nil {
+	ccy := currency.USD
+	if len(codes) > 0 && codes[0] != "" {
+		ccy = codes[0]
+	}
+	if !ccy.Valid() {
+		return Account{}, ErrInvalidRequest
+	}
+	if _, err := s.store.GetByCustomerCurrency(ctx, customerID, ccy); err == nil {
 		return Account{}, ErrExists
 	} else if err != ErrNotFound {
 		return Account{}, err
 	}
+	core, err := s.sharedCore(ctx, customerID)
+	if err != nil {
+		return Account{}, err
+	}
 	var last error
 	for i := 0; i < 5; i++ {
-		num, err := newAccountNumber()
+		if core == "" {
+			core, err = newAccountCore()
+			if err != nil {
+				return Account{}, err
+			}
+		}
+		num, err := currency.Issue(ccy, core)
 		if err != nil {
 			return Account{}, err
 		}
 		acct := Account{
 			ID:            uuid.New(),
 			CustomerID:    customerID,
+			Currency:      ccy,
 			AccountNumber: num,
 			Status:        StatusActive,
 			LedgerID:      uuid.New(),
@@ -63,9 +82,23 @@ func (s *Service) Open(ctx context.Context, customerID uuid.UUID) (Account, erro
 		if err != ErrNumberTaken {
 			return Account{}, err
 		}
+		core = ""
 		last = err
 	}
 	return Account{}, last
+}
+
+func (s *Service) sharedCore(ctx context.Context, customerID uuid.UUID) (string, error) {
+	list, err := s.store.ListByCustomer(ctx, customerID)
+	if err != nil {
+		return "", err
+	}
+	for _, a := range list {
+		if c := currency.Core(a.AccountNumber); c != "" {
+			return c, nil
+		}
+	}
+	return "", nil
 }
 
 func (s *Service) List(ctx context.Context, customerID uuid.UUID) ([]Account, error) {
@@ -100,12 +133,12 @@ func (s *Service) Fund(ctx context.Context, customerID, accountID uuid.UUID, amo
 	}
 	j := ledger.Journal{
 		ID:             uuid.New(),
-		Description:    fmt.Sprintf("Demo funding %d cents to %s", amountCents, acct.AccountNumber),
+		Description:    fmt.Sprintf("Demo funding %d %s to %s", amountCents, acct.Currency, acct.AccountNumber),
 		Kind:           ledger.KindFunding,
 		IdempotencyKey: key,
 		Lines: []ledger.Line{
-			{LedgerAccountID: ledger.VaultID, Side: ledger.Debit, AmountCents: amountCents},
-			{LedgerAccountID: acct.LedgerID, Side: ledger.Credit, AmountCents: amountCents},
+			{LedgerAccountID: currency.Vault(acct.Currency), Side: ledger.Debit, AmountCents: amountCents, Currency: acct.Currency},
+			{LedgerAccountID: acct.LedgerID, Side: ledger.Credit, AmountCents: amountCents, Currency: acct.Currency},
 		},
 	}
 	posted, replay, err := s.store.Post(ctx, j, map[uuid.UUID]int64{acct.ID: amountCents})
@@ -168,12 +201,12 @@ func (s *Service) Withdraw(ctx context.Context, customerID, accountID uuid.UUID,
 	}
 	j := ledger.Journal{
 		ID:             uuid.New(),
-		Description:    fmt.Sprintf("Withdrawal %d cents from %s", amountCents, acct.AccountNumber),
+		Description:    fmt.Sprintf("Withdrawal %d %s from %s", amountCents, acct.Currency, acct.AccountNumber),
 		Kind:           ledger.KindWithdrawal,
 		IdempotencyKey: key,
 		Lines: []ledger.Line{
-			{LedgerAccountID: acct.LedgerID, Side: ledger.Debit, AmountCents: amountCents},
-			{LedgerAccountID: ledger.VaultID, Side: ledger.Credit, AmountCents: amountCents},
+			{LedgerAccountID: acct.LedgerID, Side: ledger.Debit, AmountCents: amountCents, Currency: acct.Currency},
+			{LedgerAccountID: currency.Vault(acct.Currency), Side: ledger.Credit, AmountCents: amountCents, Currency: acct.Currency},
 		},
 	}
 	posted, replay, err := s.store.Post(ctx, j, map[uuid.UUID]int64{acct.ID: -amountCents})
@@ -187,7 +220,7 @@ func (s *Service) Withdraw(ctx context.Context, customerID, accountID uuid.UUID,
 	return fresh, posted, replay, nil
 }
 
-func newAccountNumber() (string, error) {
+func newAccountCore() (string, error) {
 	var buf [8]byte
 	if _, err := rand.Read(buf[:]); err != nil {
 		return "", err
@@ -197,13 +230,6 @@ func newAccountNumber() (string, error) {
 }
 
 func ValidAccountNumber(n string) bool {
-	if len(n) != 8 {
-		return false
-	}
-	for i := 0; i < 8; i++ {
-		if n[i] < '0' || n[i] > '9' {
-			return false
-		}
-	}
-	return true
+	_, _, ok := currency.Normalize(n)
+	return ok
 }

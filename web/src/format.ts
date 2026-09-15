@@ -8,14 +8,69 @@ export function usdParts(cents: number): { sign: string; dollars: string; frac: 
   };
 }
 
-export function formatUSD(cents: number): string {
+export function currencySymbol(ccy = "USD"): string {
+  if (ccy === "EUR") return "€";
+  if (ccy === "GBP") return "£";
+  return "$";
+}
+
+export function formatMoney(cents: number, ccy = "USD"): string {
   const { sign, dollars, frac } = usdParts(cents);
-  return `${sign}$${dollars}.${frac}`;
+  return `${sign}${currencySymbol(ccy)}${dollars}.${frac}`;
+}
+
+export function formatUSD(cents: number): string {
+  return formatMoney(cents, "USD");
+}
+
+export const CURRENCIES = ["USD", "EUR", "GBP"] as const;
+
+export function compactAccountInput(raw: string, max = 22): string {
+  return raw.replace(/[\s·-]/g, "").toUpperCase().slice(0, max);
+}
+
+export function accountLooksReady(n: string): boolean {
+  const c = compactAccountInput(n);
+  return /^\d{8}$/.test(c) || /^040004\d{8}$/.test(c) || /^GB\d{2}THEB040004\d{8}$/.test(c);
+}
+
+export function accountCurrencyOf(n: string): string {
+  const c = compactAccountInput(n);
+  if (/^GB/i.test(c) || c.length === 22) return "EUR";
+  if (c.startsWith("040004") && c.length === 14) return "GBP";
+  return "USD";
 }
 
 export function formatAccountNumber(n: string): string {
-  if (n.length === 8) return `${n.slice(0, 4)} · ${n.slice(4)}`;
+  const compact = compactAccountInput(n);
+  if (/^\d{8}$/.test(compact)) return `${compact.slice(0, 4)} · ${compact.slice(4)}`;
+  if (/^040004\d{8}$/.test(compact)) {
+    return `${compact.slice(0, 2)}-${compact.slice(2, 4)}-${compact.slice(4, 6)} · ${compact.slice(6, 10)} ${compact.slice(6 + 4)}`;
+  }
+  if (compact.length >= 4 && compact.startsWith("GB")) {
+    return compact.replace(/(.{4})/g, "$1 ").trim();
+  }
   return n;
+}
+
+export function maskAccountInput(raw: string): string {
+  const compact = compactAccountInput(raw);
+  if (!compact) return "";
+  if (/^GB/i.test(compact) || /[A-Z]/.test(compact)) {
+    return compact.replace(/(.{4})/g, "$1 ").trim();
+  }
+  if (compact.startsWith("040004") || compact.length > 8) {
+    const d = compact.replace(/\D/g, "").slice(0, 14);
+    if (d.length <= 6) {
+      if (d.length <= 2) return d;
+      if (d.length <= 4) return `${d.slice(0, 2)}-${d.slice(2)}`;
+      return `${d.slice(0, 2)}-${d.slice(2, 4)}-${d.slice(4)}`;
+    }
+    return `${d.slice(0, 2)}-${d.slice(2, 4)}-${d.slice(4, 6)} · ${d.slice(6, 10)}${d.length > 10 ? ` ${d.slice(10)}` : ""}`;
+  }
+  const d = compact.replace(/\D/g, "").slice(0, 8);
+  if (d.length <= 4) return d;
+  return `${d.slice(0, 4)} · ${d.slice(4)}`;
 }
 
 export function greeting(now = new Date()): string {
@@ -34,17 +89,8 @@ export function activityTitle(kind: string, signedCents: number): string {
   if (kind === "funding") return "Added money";
   if (kind === "withdrawal") return "Withdrew money";
   if (kind === "transfer") return signedCents >= 0 ? "Received" : "Sent";
+  if (kind === "fx") return "Converted";
   return kind;
-}
-
-export function digitsOnly(value: string, max = 8): string {
-  return value.replace(/\D/g, "").slice(0, max);
-}
-
-export function maskAccountInput(digits: string): string {
-  const d = digitsOnly(digits);
-  if (d.length <= 4) return d;
-  return `${d.slice(0, 4)} · ${d.slice(4)}`;
 }
 
 export function activityHint(
@@ -58,6 +104,7 @@ export function activityHint(
   if (memo) return memo;
   if (kind === "funding") return "Added instantly";
   if (kind === "withdrawal") return "Cashed out";
+  if (kind === "fx") return signedCents >= 0 ? "From another balance" : "To another balance";
   if (kind === "transfer") {
     const who = payeeLabel(counterpartyNumber, counterpartyName);
     if (signedCents >= 0) return who ? `From ${who}` : "From another account";
@@ -69,6 +116,7 @@ export function activityHint(
 export function activityKindLabel(kind: string, signedCents = 0): string {
   if (kind === "funding") return "Added instantly";
   if (kind === "withdrawal") return "Cashed out";
+  if (kind === "fx") return "Converted";
   if (kind === "transfer") return signedCents >= 0 ? "Incoming" : "Outgoing";
   return "Payment";
 }
@@ -188,6 +236,8 @@ export function auditLabel(action: string): string {
       return "Unfroze account";
     case "account_close":
       return "Closed account";
+    case "fx":
+      return "Converted money";
     default:
       return action;
   }
@@ -196,5 +246,5 @@ export function auditLabel(action: string): string {
 export function auditAmount(meta?: Record<string, string>): string {
   const raw = meta?.amount_cents ?? "";
   if (!/^-?\d+$/.test(raw)) return "";
-  return formatUSD(Number(raw));
+  return formatMoney(Number(raw), meta?.currency || meta?.from_currency || "USD");
 }

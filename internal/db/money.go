@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"bank/internal/account"
+	"bank/internal/currency"
 	"bank/internal/ledger"
 )
 
@@ -21,11 +22,14 @@ func (s *Store) OpenDeposit(ctx context.Context, acct account.Account) (account.
 	}
 	defer tx.Rollback(ctx)
 
+	if acct.Currency == "" {
+		acct.Currency = currency.USD
+	}
 	const insertAcct = `
-		INSERT INTO accounts (id, customer_id, account_number, status, balance_cents)
-		VALUES ($1, $2, $3, $4, 0)
+		INSERT INTO accounts (id, customer_id, currency, account_number, status, balance_cents)
+		VALUES ($1, $2, $3, $4, $5, 0)
 		RETURNING opened_at`
-	if err := tx.QueryRow(ctx, insertAcct, acct.ID, acct.CustomerID, acct.AccountNumber, string(acct.Status)).Scan(&acct.OpenedAt); err != nil {
+	if err := tx.QueryRow(ctx, insertAcct, acct.ID, acct.CustomerID, string(acct.Currency), acct.AccountNumber, string(acct.Status)).Scan(&acct.OpenedAt); err != nil {
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) && pe.Code == "23505" {
 			if strings.Contains(pe.ConstraintName, "customer_id") {
@@ -39,9 +43,9 @@ func (s *Store) OpenDeposit(ctx context.Context, acct account.Account) (account.
 		return account.Account{}, err
 	}
 	const insertLedger = `
-		INSERT INTO ledger_accounts (id, name, kind, account_id)
-		VALUES ($1, $2, $3, $4)`
-	if _, err := tx.Exec(ctx, insertLedger, acct.LedgerID, "Demand deposit "+acct.AccountNumber, string(ledger.KindLiability), acct.ID); err != nil {
+		INSERT INTO ledger_accounts (id, name, kind, currency, account_id)
+		VALUES ($1, $2, $3, $4, $5)`
+	if _, err := tx.Exec(ctx, insertLedger, acct.LedgerID, "Demand deposit "+acct.AccountNumber, string(ledger.KindLiability), string(acct.Currency), acct.ID); err != nil {
 		return account.Account{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -53,43 +57,50 @@ func (s *Store) OpenDeposit(ctx context.Context, acct account.Account) (account.
 
 func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (account.Account, error) {
 	return s.scanAccount(ctx, s.pool, `
-		SELECT a.id, a.customer_id, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
+		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
 		FROM accounts a
 		JOIN ledger_accounts la ON la.account_id = a.id
 		WHERE a.id = $1`, id)
 }
 
-func (s *Store) GetByCustomer(ctx context.Context, customerID uuid.UUID) (account.Account, error) {
+func (s *Store) GetByCustomerCurrency(ctx context.Context, customerID uuid.UUID, ccy currency.Code) (account.Account, error) {
+	if ccy == "" {
+		ccy = currency.USD
+	}
 	return s.scanAccount(ctx, s.pool, `
-		SELECT a.id, a.customer_id, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
+		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
 		FROM accounts a
 		JOIN ledger_accounts la ON la.account_id = a.id
-		WHERE a.customer_id = $1`, customerID)
+		WHERE a.customer_id = $1 AND a.currency = $2`, customerID, string(ccy))
 }
 
 func (s *Store) GetByNumber(ctx context.Context, number string) (account.Account, error) {
+	n, _, ok := currency.Normalize(number)
+	if !ok {
+		return account.Account{}, account.ErrNotFound
+	}
 	return s.scanAccount(ctx, s.pool, `
-		SELECT a.id, a.customer_id, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
+		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
 		FROM accounts a
 		JOIN ledger_accounts la ON la.account_id = a.id
-		WHERE a.account_number = $1`, number)
+		WHERE a.account_number = $1`, n)
 }
 
 func (s *Store) ListByCustomer(ctx context.Context, customerID uuid.UUID) ([]account.Account, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT a.id, a.customer_id, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
+		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
 		FROM accounts a
 		JOIN ledger_accounts la ON la.account_id = a.id
 		WHERE a.customer_id = $1
-		ORDER BY a.opened_at`, customerID)
+		ORDER BY CASE a.currency WHEN 'USD' THEN 0 WHEN 'EUR' THEN 1 ELSE 2 END, a.opened_at`, customerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []account.Account
 	for rows.Next() {
-		var a account.Account
-		if err := rows.Scan(&a.ID, &a.CustomerID, &a.AccountNumber, &a.Status, &a.BalanceCents, &a.OpenedAt, &a.LedgerID); err != nil {
+		a, err := scanAccountRow(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -108,7 +119,7 @@ func (s *Store) SetStatus(ctx context.Context, id uuid.UUID, next account.Status
 	defer tx.Rollback(ctx)
 
 	acct, err := s.scanAccount(ctx, tx, `
-		SELECT a.id, a.customer_id, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
+		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
 		FROM accounts a
 		JOIN ledger_accounts la ON la.account_id = a.id
 		WHERE a.id = $1
@@ -288,16 +299,28 @@ type rowQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-func (s *Store) scanAccount(ctx context.Context, q rowQuerier, sql string, arg any) (account.Account, error) {
-	var a account.Account
-	err := q.QueryRow(ctx, sql, arg).Scan(
-		&a.ID, &a.CustomerID, &a.AccountNumber, &a.Status, &a.BalanceCents, &a.OpenedAt, &a.LedgerID,
-	)
+type accountRow interface {
+	Scan(dest ...any) error
+}
+
+func (s *Store) scanAccount(ctx context.Context, q rowQuerier, sql string, args ...any) (account.Account, error) {
+	a, err := scanAccountRow(q.QueryRow(ctx, sql, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return account.Account{}, account.ErrNotFound
 	}
 	if err != nil {
 		return account.Account{}, err
 	}
+	return a, nil
+}
+
+func scanAccountRow(row accountRow) (account.Account, error) {
+	var a account.Account
+	var ccy string
+	err := row.Scan(&a.ID, &a.CustomerID, &ccy, &a.AccountNumber, &a.Status, &a.BalanceCents, &a.OpenedAt, &a.LedgerID)
+	if err != nil {
+		return account.Account{}, err
+	}
+	a.Currency = currency.Code(ccy)
 	return a, nil
 }
