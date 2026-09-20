@@ -252,8 +252,9 @@ export function deletePayee(id: string) {
   return request<void>(`/api/v1/payees/${id}`, { method: "DELETE" });
 }
 
-export function listActivity(accountId: string) {
-  return request<{ items: ActivityItem[] }>(`/api/v1/accounts/${accountId}/activity`);
+export function listActivity(accountId: string, limit = 50) {
+  const q = limit !== 50 ? `?limit=${limit}` : "";
+  return request<{ items: ActivityItem[] }>(`/api/v1/accounts/${accountId}/activity${q}`);
 }
 
 export function listAudit() {

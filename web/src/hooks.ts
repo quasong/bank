@@ -128,6 +128,36 @@ export function useSelectedAccount(accounts: BankAccount[] | null) {
   return { selected, select };
 }
 
+export function useActivityFeed(accountIds: string[], limit = 100) {
+  const key = accountIds.join(",");
+  const [state, setState] = useState<{ key: string; items: ActivityItem[] | null }>({ key: "", items: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    const ids = key ? key.split(",") : [];
+    if (!ids.length) {
+      setState({ key, items: [] });
+      return;
+    }
+    setState({ key, items: null });
+    Promise.all(ids.map((id) => listActivity(id, limit).then((data) => data.items)))
+      .then((batches) => {
+        if (cancelled) return;
+        const items = batches.flat().sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+        setState({ key, items });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ key, items: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [key, limit]);
+
+  const items = state.key === key ? state.items : null;
+  return { items };
+}
+
 export function useToast(ms = 2400) {
   const [text, setText] = useState("");
   const timer = useRef(0);

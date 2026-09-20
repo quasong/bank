@@ -388,9 +388,23 @@ export function Wallets({
   onSelect: (id: string) => void;
   onAdd?: () => void;
 }) {
+  const scroller = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const root = scroller.current;
+    const on = root?.querySelector<HTMLElement>(".wallet.on");
+    if (!root || !on) return;
+    const onRect = on.getBoundingClientRect();
+    const rootRect = root.getBoundingClientRect();
+    if (onRect.left < rootRect.left + 8) {
+      root.scrollBy({ left: onRect.left - rootRect.left - 8, behavior: "smooth" });
+    } else if (onRect.right > rootRect.right - 8) {
+      root.scrollBy({ left: onRect.right - rootRect.right + 8, behavior: "smooth" });
+    }
+  }, [selectedId]);
+
   if (accounts.length < 2 && !onAdd) return null;
   return (
-    <section className="wallets" aria-label="Balances">
+    <section className="wallets" aria-label="Balances" ref={scroller}>
       {accounts.map((a) => (
         <button
           key={a.id}
@@ -412,7 +426,7 @@ export function Wallets({
         <button type="button" className="wallet add" onClick={onAdd}>
           <span className="wallet-id">
             <span>
-              <strong>Add currency</strong>
+              <strong>Add</strong>
               <em>New balance</em>
             </span>
           </span>
@@ -432,9 +446,32 @@ export function CurrencyChoices({
   pending?: boolean;
   onPick: (ccy: string) => void;
 }) {
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const shown = currencies.filter((ccy) => {
+    if (!needle) return true;
+    return (
+      ccy.toLowerCase().includes(needle) ||
+      currencyName(ccy).toLowerCase().includes(needle) ||
+      currencyShortName(ccy).toLowerCase().includes(needle) ||
+      currencySymbol(ccy).toLowerCase().includes(needle)
+    );
+  });
   return (
     <div className="sheet-actions col">
-      {currencies.map((ccy) => (
+      {currencies.length > 6 ? (
+        <label className="finder">
+          <span className="sr-only">Search currencies</span>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search currencies"
+            autoComplete="off"
+            autoFocus
+          />
+        </label>
+      ) : null}
+      {shown.map((ccy) => (
         <button
           key={ccy}
           className={`currency-pick ccy-${ccy}`}
@@ -451,6 +488,7 @@ export function CurrencyChoices({
           </span>
         </button>
       ))}
+      {shown.length === 0 ? <p className="panel-empty">No currency matches that search.</p> : null}
     </div>
   );
 }
@@ -469,8 +507,15 @@ export function ChoiceMenu({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const current = options.find((o) => o.value === value) ?? options[0];
+  const searchable = options.length > 8;
+  const needle = query.trim().toLowerCase();
+  const shown = options.filter((o) => {
+    if (!needle) return true;
+    return `${o.code} ${o.name} ${o.amount} ${currencyName(o.code)}`.toLowerCase().includes(needle);
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -491,6 +536,10 @@ export function ChoiceMenu({
   useEffect(() => {
     if (disabled) setOpen(false);
   }, [disabled]);
+
+  useEffect(() => {
+    if (open) setQuery("");
+  }, [open]);
 
   return (
     <div
@@ -517,7 +566,19 @@ export function ChoiceMenu({
       </button>
       {open ? (
         <ul className="choice-menu" role="listbox" aria-label={label}>
-          {options.map((o) => {
+          {searchable ? (
+            <li className="choice-find" onMouseDown={(e) => e.preventDefault()}>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search"
+                aria-label="Search currencies"
+                autoComplete="off"
+                autoFocus
+              />
+            </li>
+          ) : null}
+          {shown.map((o) => {
             const on = o.value === value;
             return (
               <li key={o.value}>
@@ -542,6 +603,9 @@ export function ChoiceMenu({
               </li>
             );
           })}
+          {shown.length === 0 ? (
+            <li className="choice-empty">No match</li>
+          ) : null}
         </ul>
       ) : null}
     </div>
@@ -615,7 +679,23 @@ export function TxnSkeleton({ rows = 2 }: { rows?: number }) {
   );
 }
 
-export function TxnRow({ item, onOpen }: { item: ActivityItem; onOpen?: (item: ActivityItem) => void }) {
+export function TxnRow({
+  item,
+  onOpen,
+  showCurrency,
+}: {
+  item: ActivityItem;
+  onOpen?: (item: ActivityItem) => void;
+  showCurrency?: boolean;
+}) {
+  const hint = activityHint(
+    item.kind,
+    item.signed_cents,
+    item.counterparty_account_number,
+    item.counterparty_name,
+    item.note,
+    item.description,
+  );
   const body = (
     <>
       <span className={`txn-icon ${item.signed_cents >= 0 ? "in" : "out"}`}>
@@ -624,15 +704,8 @@ export function TxnRow({ item, onOpen }: { item: ActivityItem; onOpen?: (item: A
       <div className="txn-copy">
         <strong>{activityTitle(item.kind, item.signed_cents)}</strong>
         <span>
-          {activityHint(
-            item.kind,
-            item.signed_cents,
-            item.counterparty_account_number,
-            item.counterparty_name,
-            item.note,
-            item.description,
-          )}{" "}
-          · {recentWhen(item.created_at)}
+          {hint}
+          {showCurrency && item.currency ? ` · ${item.currency}` : ""} · {recentWhen(item.created_at)}
         </span>
       </div>
       <MoneyText cents={item.signed_cents} currency={item.currency} signed />
