@@ -6,7 +6,7 @@ Phase one shipped authentication. This codebase also has the **deposit money pat
 
 ## Architecture
 
-Modular monolith on PostgreSQL. A customer identity is not an account. Signing in does not open an account. The first deposit is USD; you can then open EUR, GBP, and other ECB-quoted balances. Each currency has its own local details (ACH routing, UK sort code, GB IBAN, or a `CCY` plus 8-digit local account). Same-currency sends stay on the ledger; cross-currency conversion uses a live ECB rate from Frankfurter and posts a balanced FX journal per currency.
+Modular monolith on PostgreSQL. A customer identity is not an account. Signing in does not open an account. The first deposit is USD; you can then open EUR, GBP, and other ECB-quoted balances. Each currency has a spend wallet with local details (ACH routing, UK sort code, GB IBAN, or a `CCY` plus 8-digit local account) and optional same-currency **jars**. Jars are extra liabilities in that currency: money moves in from the spend wallet with a `move` journal; they cannot be funded from the vault, sent to someone else, or converted. Same-currency sends stay on the ledger; cross-currency conversion uses a live ECB rate from Frankfurter and posts a balanced FX journal per currency.
 
 SQL lives in `internal/db/queries` and `migrations`. Runtime execution is pgx in `internal/db/store.go` and `internal/db/money.go`.
 
@@ -80,14 +80,16 @@ Cross-currency conversion withdraws from the source vault and funds the destinat
 
 | Method | Path | Notes |
 |------|------|------|
-| POST | `/api/v1/accounts` | Open a balance. Body `{currency?}` (`USD` default, or any supported code) |
-| GET | `/api/v1/accounts` | List mine |
+| POST | `/api/v1/accounts` | Open a spend balance `{currency?}` or a jar `{currency, product:"jar", label?}` |
+| GET | `/api/v1/accounts` | List mine (spend wallets and jars) |
 | GET | `/api/v1/accounts/{id}` | Detail, local details, and cached balance |
-| POST | `/api/v1/accounts/{id}/funding` | Demo inbound credit (`amount_cents`, `idempotency_key`) |
-| POST | `/api/v1/accounts/{id}/withdrawals` | Demo outbound debit to that currency's vault |
-| POST | `/api/v1/accounts/{id}/freeze` | Stop funding, withdrawals, transfers, and conversion |
+| PATCH | `/api/v1/accounts/{id}` | Rename a jar `{label}` |
+| POST | `/api/v1/accounts/{id}/funding` | Demo inbound credit on a spend wallet (`amount_cents`, `idempotency_key`) |
+| POST | `/api/v1/accounts/{id}/withdrawals` | Demo outbound debit from a spend wallet to that currency's vault |
+| POST | `/api/v1/accounts/{id}/freeze` | Stop funding, withdrawals, transfers, conversion, and moves |
 | POST | `/api/v1/accounts/{id}/unfreeze` | Return a frozen account to active |
-| POST | `/api/v1/accounts/{id}/close` | Close when `balance_cents` is 0; terminal |
+| POST | `/api/v1/accounts/{id}/close` | Close when `balance_cents` is 0; spend wallets need jars closed first |
+| POST | `/api/v1/moves` | Same-currency own-account `{from_account_id, to_account_id, amount_cents, idempotency_key, note?}` |
 | POST | `/api/v1/transfers` | Same-currency `{from_account_id, to_account_number, amount_cents, idempotency_key, payee_name?, note?}` |
 | GET | `/api/v1/fx/quote` | Live quote `from`, `to`, optional `amount_cents` |
 | POST | `/api/v1/fx` | Convert `{from_account_id, to_currency, amount_cents, idempotency_key}` |
@@ -102,7 +104,7 @@ Replay the same idempotency key to receive the original journal without moving m
 
 Activity `receipt` is the last 8 hex digits of `journal_id`. Copy the full `journal_id` if you need the canonical id. Funding and withdrawals have no counterparty. FX activity shows your other currency pocket as the counterparty.
 
-Funding, withdrawals, transfers, conversion, freeze, unfreeze, and close append to `audit_logs`. Idempotent replays and no-op status changes are not recorded again.
+Funding, withdrawals, transfers, conversion, jar moves, freeze, unfreeze, and close append to `audit_logs`. Idempotent replays and no-op status changes are not recorded again.
 
 ```bash
 curl -s -X POST http://127.0.0.1:8080/api/v1/auth/register \

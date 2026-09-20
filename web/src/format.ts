@@ -227,6 +227,7 @@ export function activityTitle(kind: string, signedCents: number): string {
   if (kind === "withdrawal") return "Withdrew money";
   if (kind === "transfer") return signedCents >= 0 ? "Received" : "Sent";
   if (kind === "fx") return "Converted";
+  if (kind === "move") return signedCents >= 0 ? "Moved in" : "Moved out";
   return kind;
 }
 
@@ -252,6 +253,11 @@ export function activityHint(
     if (signedCents >= 0) return who ? `From ${who}` : "From another account";
     return who ? `To ${who}` : "To another account";
   }
+  if (kind === "move") {
+    const who = payeeLabel(counterpartyNumber, counterpartyName);
+    if (signedCents >= 0) return who ? `From ${who}` : "From a jar";
+    return who ? `To ${who}` : "To a jar";
+  }
   return "Payment";
 }
 
@@ -260,6 +266,7 @@ export function activityKindLabel(kind: string, signedCents = 0): string {
   if (kind === "withdrawal") return "Cashed out";
   if (kind === "fx") return "Converted";
   if (kind === "transfer") return signedCents >= 0 ? "Incoming" : "Outgoing";
+  if (kind === "move") return "Moved";
   return "Payment";
 }
 
@@ -380,6 +387,8 @@ export function auditLabel(action: string): string {
       return "Closed account";
     case "fx":
       return "Converted money";
+    case "move":
+      return "Moved to a jar";
     default:
       return action;
   }

@@ -42,10 +42,11 @@ CREATE TABLE accounts (
         'RON', 'SEK', 'SGD', 'THB', 'TRY', 'ZAR'
     )),
     account_number TEXT NOT NULL UNIQUE,
+    product TEXT NOT NULL DEFAULT 'spend' CHECK (product IN ('spend', 'jar')),
+    label TEXT NOT NULL DEFAULT '' CHECK (char_length(label) <= 20),
     status TEXT NOT NULL CHECK (status IN ('active', 'frozen', 'closed')),
     balance_cents BIGINT NOT NULL DEFAULT 0 CHECK (balance_cents >= 0),
     opened_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (customer_id, currency),
     CHECK (
         (currency = 'USD' AND account_number ~ '^121000248[0-9]{8}$')
         OR (currency = 'GBP' AND account_number ~ '^040004[0-9]{8}$')
@@ -57,6 +58,8 @@ CREATE TABLE accounts (
         )
     )
 );
+
+CREATE UNIQUE INDEX accounts_one_spend_idx ON accounts (customer_id, currency) WHERE product = 'spend';
 
 CREATE TABLE ledger_accounts (
     id UUID PRIMARY KEY,
@@ -76,7 +79,7 @@ CREATE TABLE journals (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     description TEXT NOT NULL,
     note TEXT NOT NULL DEFAULT '' CHECK (char_length(note) <= 40),
-    kind TEXT NOT NULL CHECK (kind IN ('funding', 'transfer', 'withdrawal', 'fx')),
+    kind TEXT NOT NULL CHECK (kind IN ('funding', 'transfer', 'withdrawal', 'fx', 'move')),
     idempotency_key TEXT NOT NULL UNIQUE
 );
 

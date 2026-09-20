@@ -59,6 +59,9 @@ func (s *Service) Execute(ctx context.Context, customerID, fromID uuid.UUID, toN
 	if from.Currency != to.Currency || from.Currency != destCCY {
 		return Result{}, account.ErrCurrency
 	}
+	if from.IsJar() || to.IsJar() {
+		return Result{}, account.ErrJar
+	}
 	note, err = ledger.NormalizeNote(note)
 	if err != nil {
 		return Result{}, err

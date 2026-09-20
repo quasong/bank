@@ -26,13 +26,16 @@ func (s *Store) OpenDeposit(ctx context.Context, acct account.Account) (account.
 		acct.Currency = currency.USD
 	}
 	const insertAcct = `
-		INSERT INTO accounts (id, customer_id, currency, account_number, status, balance_cents)
-		VALUES ($1, $2, $3, $4, $5, 0)
+		INSERT INTO accounts (id, customer_id, currency, account_number, status, balance_cents, product, label)
+		VALUES ($1, $2, $3, $4, $5, 0, $6, $7)
 		RETURNING opened_at`
-	if err := tx.QueryRow(ctx, insertAcct, acct.ID, acct.CustomerID, string(acct.Currency), acct.AccountNumber, string(acct.Status)).Scan(&acct.OpenedAt); err != nil {
+	if acct.Product == "" {
+		acct.Product = account.ProductSpend
+	}
+	if err := tx.QueryRow(ctx, insertAcct, acct.ID, acct.CustomerID, string(acct.Currency), acct.AccountNumber, string(acct.Status), string(acct.Product), acct.Label).Scan(&acct.OpenedAt); err != nil {
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) && pe.Code == "23505" {
-			if strings.Contains(pe.ConstraintName, "customer_id") {
+			if strings.Contains(pe.ConstraintName, "spend") || strings.Contains(pe.ConstraintName, "customer_id") {
 				return account.Account{}, account.ErrExists
 			}
 			if strings.Contains(pe.ConstraintName, "account_number") {
@@ -55,23 +58,19 @@ func (s *Store) OpenDeposit(ctx context.Context, acct account.Account) (account.
 	return acct, nil
 }
 
-func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (account.Account, error) {
-	return s.scanAccount(ctx, s.pool, `
-		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
+const accountSelect = `SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id, a.product, a.label
 		FROM accounts a
-		JOIN ledger_accounts la ON la.account_id = a.id
-		WHERE a.id = $1`, id)
+		JOIN ledger_accounts la ON la.account_id = a.id`
+
+func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (account.Account, error) {
+	return s.scanAccount(ctx, s.pool, accountSelect+` WHERE a.id = $1`, id)
 }
 
 func (s *Store) GetByCustomerCurrency(ctx context.Context, customerID uuid.UUID, ccy currency.Code) (account.Account, error) {
 	if ccy == "" {
 		ccy = currency.USD
 	}
-	return s.scanAccount(ctx, s.pool, `
-		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
-		FROM accounts a
-		JOIN ledger_accounts la ON la.account_id = a.id
-		WHERE a.customer_id = $1 AND a.currency = $2`, customerID, string(ccy))
+	return s.scanAccount(ctx, s.pool, accountSelect+` WHERE a.customer_id = $1 AND a.currency = $2 AND a.product = 'spend'`, customerID, string(ccy))
 }
 
 func (s *Store) GetByNumber(ctx context.Context, number string) (account.Account, error) {
@@ -79,19 +78,11 @@ func (s *Store) GetByNumber(ctx context.Context, number string) (account.Account
 	if !ok {
 		return account.Account{}, account.ErrNotFound
 	}
-	return s.scanAccount(ctx, s.pool, `
-		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
-		FROM accounts a
-		JOIN ledger_accounts la ON la.account_id = a.id
-		WHERE a.account_number = $1`, n)
+	return s.scanAccount(ctx, s.pool, accountSelect+` WHERE a.account_number = $1`, n)
 }
 
 func (s *Store) ListByCustomer(ctx context.Context, customerID uuid.UUID) ([]account.Account, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
-		FROM accounts a
-		JOIN ledger_accounts la ON la.account_id = a.id
-		WHERE a.customer_id = $1`, customerID)
+	rows, err := s.pool.Query(ctx, accountSelect+` WHERE a.customer_id = $1`, customerID)
 	if err != nil {
 		return nil, err
 	}
@@ -112,11 +103,7 @@ func (s *Store) ListByCustomer(ctx context.Context, customerID uuid.UUID) ([]acc
 }
 
 func (s *Store) ListAll(ctx context.Context) ([]account.Account, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
-		FROM accounts a
-		JOIN ledger_accounts la ON la.account_id = a.id
-		ORDER BY a.opened_at`)
+	rows, err := s.pool.Query(ctx, accountSelect+` ORDER BY a.opened_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -162,6 +149,27 @@ func (s *Store) SetNumber(ctx context.Context, id uuid.UUID, number string) erro
 	return tx.Commit(ctx)
 }
 
+func (s *Store) SetLabel(ctx context.Context, id uuid.UUID, label string) (account.Account, error) {
+	tag, err := s.pool.Exec(ctx, `UPDATE accounts SET label = $2 WHERE id = $1 AND product = 'jar' AND status <> 'closed'`, id, label)
+	if err != nil {
+		return account.Account{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		acct, getErr := s.GetByID(ctx, id)
+		if getErr != nil {
+			return account.Account{}, getErr
+		}
+		if !acct.IsJar() {
+			return account.Account{}, account.ErrJar
+		}
+		if acct.Status == account.StatusClosed {
+			return account.Account{}, account.ErrClosed
+		}
+		return account.Account{}, account.ErrNotFound
+	}
+	return s.GetByID(ctx, id)
+}
+
 func (s *Store) SetStatus(ctx context.Context, id uuid.UUID, next account.Status) (account.Account, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -169,10 +177,7 @@ func (s *Store) SetStatus(ctx context.Context, id uuid.UUID, next account.Status
 	}
 	defer tx.Rollback(ctx)
 
-	acct, err := s.scanAccount(ctx, tx, `
-		SELECT a.id, a.customer_id, a.currency, a.account_number, a.status, a.balance_cents, a.opened_at, la.id
-		FROM accounts a
-		JOIN ledger_accounts la ON la.account_id = a.id
+	acct, err := s.scanAccount(ctx, tx, accountSelect+`
 		WHERE a.id = $1
 		FOR UPDATE OF a`, id)
 	if err != nil {
@@ -367,12 +372,16 @@ func (s *Store) scanAccount(ctx context.Context, q rowQuerier, sql string, args 
 
 func scanAccountRow(row accountRow) (account.Account, error) {
 	var a account.Account
-	var ccy string
-	err := row.Scan(&a.ID, &a.CustomerID, &ccy, &a.AccountNumber, &a.Status, &a.BalanceCents, &a.OpenedAt, &a.LedgerID)
+	var ccy, product string
+	err := row.Scan(&a.ID, &a.CustomerID, &ccy, &a.AccountNumber, &a.Status, &a.BalanceCents, &a.OpenedAt, &a.LedgerID, &product, &a.Label)
 	if err != nil {
 		return account.Account{}, err
 	}
 	a.Currency = currency.Code(ccy)
+	a.Product = account.Product(product)
+	if a.Product == "" {
+		a.Product = account.ProductSpend
+	}
 	return a, nil
 }
 
@@ -381,6 +390,9 @@ func sortAccounts(out []account.Account) {
 		ri, rj := out[i].Currency.Rank(), out[j].Currency.Rank()
 		if ri != rj {
 			return ri < rj
+		}
+		if out[i].IsSpend() != out[j].IsSpend() {
+			return out[i].IsSpend()
 		}
 		return out[i].OpenedAt.Before(out[j].OpenedAt)
 	})

@@ -44,6 +44,8 @@ type accountBody struct {
 	Currency               string            `json:"currency"`
 	AccountNumber          string            `json:"account_number"`
 	AccountNumberFormatted string            `json:"account_number_formatted"`
+	Product                string            `json:"product"`
+	Label                  string            `json:"label,omitempty"`
 	Status                 string            `json:"status"`
 	BalanceCents           int64             `json:"balance_cents"`
 	OpenedAt               string            `json:"opened_at"`
@@ -78,7 +80,24 @@ func (h *Handler) Open(w http.ResponseWriter, r *http.Request) {
 		}
 		codes = []currency.Code{ccy}
 	}
-	acct, err := h.svc.Open(r.Context(), customerID, codes...)
+	productRaw, _ := moneyjson.String(raw["product"])
+	product, ok := ParseProduct(productRaw)
+	if !ok {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+		return
+	}
+	var acct Account
+	var err error
+	if product == ProductJar {
+		ccy := currency.USD
+		if len(codes) > 0 {
+			ccy = codes[0]
+		}
+		label, _ := moneyjson.String(raw["label"])
+		acct, err = h.svc.OpenJar(r.Context(), customerID, ccy, label)
+	} else {
+		acct, err = h.svc.Open(r.Context(), customerID, codes...)
+	}
 	if err != nil {
 		writeAccountError(w, err)
 		return
@@ -199,6 +218,83 @@ func (h *Handler) Close(w http.ResponseWriter, r *http.Request) {
 	h.writeStatusChange(w, r, h.svc.Close, audit.AccountClose)
 }
 
+func (h *Handler) Rename(w http.ResponseWriter, r *http.Request) {
+	customerID, acctID, ok := pathAccount(w, r)
+	if !ok {
+		return
+	}
+	var raw map[string]json.RawMessage
+	if err := moneyjson.Decode(r.Body, &raw); err != nil {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+		return
+	}
+	label, _ := moneyjson.String(raw["label"])
+	acct, err := h.svc.RenameJar(r.Context(), customerID, acctID, label)
+	if err != nil {
+		writeAccountError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"account": toAccountBody(acct)})
+}
+
+func (h *Handler) Move(w http.ResponseWriter, r *http.Request) {
+	customerID, ok := auth.CustomerIDFrom(r.Context())
+	if !ok {
+		auth.WriteError(w, http.StatusUnauthorized, "unauthorized", "please sign in again")
+		return
+	}
+	var raw map[string]json.RawMessage
+	if err := moneyjson.Decode(r.Body, &raw); err != nil {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+		return
+	}
+	amount, err := moneyjson.PositiveCents(raw["amount_cents"])
+	if err != nil {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "amount_cents must be a positive integer")
+		return
+	}
+	fromStr, err := moneyjson.String(raw["from_account_id"])
+	if err != nil {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+		return
+	}
+	toStr, err := moneyjson.String(raw["to_account_id"])
+	if err != nil {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+		return
+	}
+	fromID, err := uuid.Parse(fromStr)
+	if err != nil {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+		return
+	}
+	toID, err := uuid.Parse(toStr)
+	if err != nil {
+		auth.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+		return
+	}
+	key, _ := moneyjson.String(raw["idempotency_key"])
+	note, _ := moneyjson.String(raw["note"])
+	res, err := h.svc.Move(r.Context(), customerID, fromID, toID, amount, key, note)
+	if err != nil {
+		writeAccountError(w, err)
+		return
+	}
+	if !res.Idempotent {
+		h.recordMove(r, customerID, res)
+	}
+	status := http.StatusCreated
+	if res.Idempotent {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, map[string]any{
+		"from":    toAccountBody(res.From),
+		"to":      toAccountBody(res.To),
+		"journal": toJournalBody(res.Journal),
+		"replay":  res.Idempotent,
+	})
+}
+
 func (h *Handler) writeStatusChange(w http.ResponseWriter, r *http.Request, fn func(ctx context.Context, customerID, accountID uuid.UUID) (Account, error), action string) {
 	customerID, acctID, ok := pathAccount(w, r)
 	if !ok {
@@ -252,6 +348,16 @@ func (h *Handler) Activity(w http.ResponseWriter, r *http.Request) {
 	var names map[string]string
 	if h.names != nil {
 		names, _ = h.names.Names(r.Context(), customerID)
+	}
+	if names == nil {
+		names = map[string]string{}
+	}
+	if list, err := h.svc.List(r.Context(), customerID); err == nil {
+		for _, a := range list {
+			if a.IsJar() {
+				names[a.AccountNumber] = a.DisplayName()
+			}
+		}
 	}
 	out := make([]map[string]any, 0, len(items))
 	for _, e := range items {
@@ -315,6 +421,8 @@ func toAccountBody(a Account) accountBody {
 		Currency:               string(a.Currency),
 		AccountNumber:          a.AccountNumber,
 		AccountNumberFormatted: currency.Format(a.AccountNumber),
+		Product:                string(a.Product),
+		Label:                  a.Label,
 		Status:                 string(a.Status),
 		BalanceCents:           a.BalanceCents,
 		OpenedAt:               a.OpenedAt.UTC().Format(time.RFC3339),
@@ -356,6 +464,27 @@ func (h *Handler) recordMoney(r *http.Request, customerID uuid.UUID, action stri
 	})
 }
 
+func (h *Handler) recordMove(r *http.Request, customerID uuid.UUID, res MoveResult) {
+	if h.audit == nil {
+		return
+	}
+	_ = h.audit.InsertAudit(r.Context(), auth.AuditRecord{
+		ID:        uuid.New(),
+		ActorID:   &customerID,
+		Action:    audit.Move,
+		IP:        audit.ClientIP(r),
+		UserAgent: r.UserAgent(),
+		Metadata: map[string]string{
+			"from_account_id": res.From.ID.String(),
+			"to_account_id":   res.To.ID.String(),
+			"account_id":      res.From.ID.String(),
+			"currency":        string(res.From.Currency),
+			"amount_cents":    strconv.FormatInt(res.AmountCents, 10),
+			"journal_id":      res.Journal.ID.String(),
+		},
+	})
+}
+
 func (h *Handler) recordStatus(r *http.Request, customerID uuid.UUID, action string, acct Account) {
 	if h.audit == nil {
 		return
@@ -393,6 +522,14 @@ func writeAccountError(w http.ResponseWriter, err error) {
 		auth.WriteError(w, http.StatusForbidden, "account_closed", "account is closed")
 	case errors.Is(err, ErrHasBalance):
 		auth.WriteError(w, http.StatusConflict, "account_has_balance", "withdraw remaining funds before closing")
+	case errors.Is(err, ErrHasJars):
+		auth.WriteError(w, http.StatusConflict, "jars_open", "move jar balances out and close them first")
+	case errors.Is(err, ErrJar):
+		auth.WriteError(w, http.StatusBadRequest, "jar_account", "jars only move money inside your own balances")
+	case errors.Is(err, ErrJarLimit):
+		auth.WriteError(w, http.StatusConflict, "jar_limit", "this currency already has the maximum number of jars")
+	case errors.Is(err, ErrNeedSpend):
+		auth.WriteError(w, http.StatusConflict, "need_spend", "open this currency first")
 	case errors.Is(err, ErrInsufficient):
 		auth.WriteError(w, http.StatusConflict, "insufficient_funds", "insufficient funds")
 	case errors.Is(err, ErrSameAccount):

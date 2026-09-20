@@ -105,6 +105,9 @@ func (s *Service) Convert(ctx context.Context, customerID, fromID uuid.UUID, toC
 	if from.Currency == toCCY {
 		return Result{}, account.ErrInvalidRequest
 	}
+	if from.IsJar() {
+		return Result{}, account.ErrJar
+	}
 	if err := from.Status.MoneyError(); err != nil {
 		return Result{}, err
 	}

@@ -18,6 +18,7 @@ const (
 	KindTransfer   Kind = "transfer"
 	KindWithdrawal Kind = "withdrawal"
 	KindFX         Kind = "fx"
+	KindMove       Kind = "move"
 )
 
 type Side string

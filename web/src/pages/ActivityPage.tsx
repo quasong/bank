@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ActivityItem } from "../api";
 import { activityHint, activityKindLabel, activityTitle, currencyName, dayLabel } from "../format";
-import { useAccounts, useActivityFeed, useSelectedAccount } from "../hooks";
+import { spendAccounts, useAccounts, useActivityFeed, useSelectedAccount } from "../hooks";
 import { Banner, EmptyState, Page, PageSkeleton, TxnDetail, TxnRow, TxnSkeleton, Wallets } from "../ui";
 
 type Filter = "all" | "in" | "out";
@@ -99,7 +99,7 @@ export function ActivityPage() {
     <Page title="Activity" kicker={allBalances ? "All balances" : currencyName(selected.currency)}>
       {error ? <Banner>{error}</Banner> : null}
       <Wallets
-        accounts={accounts}
+        accounts={spendAccounts(accounts)}
         selectedId={selected.id}
         onSelect={(id) => {
           select(id);

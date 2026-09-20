@@ -168,3 +168,33 @@ func TestTransferRejectsLongNote(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestTransferRejectsJar(t *testing.T) {
+	ctx := context.Background()
+	store := account.NewMemStore()
+	accounts := account.NewService(store)
+	svc := NewService(store)
+	aCust := uuid.New()
+	bCust := uuid.New()
+	from, err := accounts.Open(ctx, aCust)
+	if err != nil {
+		t.Fatal(err)
+	}
+	to, err := accounts.Open(ctx, bCust)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := accounts.Fund(ctx, aCust, from.ID, 1000, "in"); err != nil {
+		t.Fatal(err)
+	}
+	jar, err := accounts.OpenJar(ctx, aCust, currency.USD, "Rent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Execute(ctx, aCust, jar.ID, to.AccountNumber, 10, "from-jar", ""); !errors.Is(err, account.ErrJar) {
+		t.Fatalf("from jar: %v", err)
+	}
+	if _, err := svc.Execute(ctx, aCust, from.ID, jar.AccountNumber, 10, "to-own-jar", ""); !errors.Is(err, account.ErrJar) {
+		t.Fatalf("to own jar: %v", err)
+	}
+}

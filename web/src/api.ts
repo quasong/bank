@@ -33,6 +33,10 @@ const FRIENDLY: Record<string, string> = {
   rate_limited: "Too many attempts. Try again in a moment",
   account_locked: "This profile is locked",
   account_exists: "You already have this currency",
+  need_spend: "Open this currency first",
+  jar_account: "Jars only move money inside your own balances",
+  jar_limit: "This currency already has the maximum number of jars",
+  jars_open: "Move jar balances out and close them first",
   own_account: "That's your own account",
   payee_not_found: "That person isn't saved",
   account_not_found: "No account with that number",
@@ -117,6 +121,8 @@ export type BankAccount = {
   currency: string;
   account_number: string;
   account_number_formatted?: string;
+  product?: string;
+  label?: string;
   status: string;
   balance_cents: number;
   opened_at: string;
@@ -157,9 +163,37 @@ export function listAccounts() {
   return request<{ accounts: BankAccount[] }>("/api/v1/accounts");
 }
 
-export function openAccount(currency?: string) {
-  const body = currency ? JSON.stringify({ currency }) : undefined;
-  return request<{ account: BankAccount }>("/api/v1/accounts", { method: "POST", body });
+export function openAccount(currency?: string, opts?: { product?: "spend" | "jar"; label?: string }) {
+  const body: Record<string, string> = {};
+  if (currency) body.currency = currency;
+  if (opts?.product) body.product = opts.product;
+  if (opts?.label) body.label = opts.label;
+  return request<{ account: BankAccount }>("/api/v1/accounts", {
+    method: "POST",
+    body: Object.keys(body).length ? JSON.stringify(body) : undefined,
+  });
+}
+
+export function renameAccount(id: string, label: string) {
+  return request<{ account: BankAccount }>(`/api/v1/accounts/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ label }),
+  });
+}
+
+export function moveMoney(fromAccountId: string, toAccountId: string, amountCents: number, idempotencyKey: string, note?: string) {
+  const body: Record<string, unknown> = {
+    from_account_id: fromAccountId,
+    to_account_id: toAccountId,
+    amount_cents: amountCents,
+    idempotency_key: idempotencyKey,
+  };
+  const memo = note?.trim();
+  if (memo) body.note = memo.slice(0, 40);
+  return request<{ from: BankAccount; to: BankAccount; replay: boolean }>("/api/v1/moves", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function fundAccount(id: string, amountCents: number, idempotencyKey: string) {

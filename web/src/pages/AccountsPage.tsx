@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { closeAccount, errorMessage, freezeAccount, openAccount, unfreezeAccount } from "../api";
+import { closeAccount, errorMessage, freezeAccount, openAccount, unfreezeAccount, type BankAccount } from "../api";
 import { CURRENCIES, auditAmount, auditLabel, copyText, currencyName, formatAccountNumber, formatLocalAccount, openedLabel, recentWhen } from "../format";
-import { useAccounts, useAudit, useSelectedAccount, useToast } from "../hooks";
+import { jarsFor, spendAccounts, useAccounts, useAudit, useSelectedAccount, useToast } from "../hooks";
+import { AddJarSheet, JarSheet, JarsPanel, createJar } from "../jars";
 import { MoneySheet } from "../moneyflow";
 import { PeoplePanel } from "../people";
 import { AccountHero, Banner, CurrencyChoices, EmptyState, IconArrow, IconMinus, IconPlus, IconSwap, Page, PageSkeleton, Sheet, Toast, Wallets } from "../ui";
@@ -19,9 +20,12 @@ export function AccountsPage() {
   const [closing, setClosing] = useState(false);
   const [freezing, setFreezing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [addingJar, setAddingJar] = useState(false);
+  const [openJar, setOpenJar] = useState<BankAccount | null>(null);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const missing = CURRENCIES.filter((c) => !(accounts ?? []).some((a) => a.currency === c));
+  const missing = CURRENCIES.filter((c) => !spendAccounts(accounts).some((a) => a.currency === c));
+  const wallets = spendAccounts(accounts);
   const ownNumbers = (accounts ?? []).map((a) => a.account_number);
 
   useEffect(() => {
@@ -44,6 +48,23 @@ export function AccountsPage() {
       await reloadAudit().catch(() => undefined);
     } catch (err) {
       setError(errorMessage(err, "Could not open account"));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function onJar(label: string) {
+    if (!selected) return;
+    setError("");
+    setPending(true);
+    try {
+      const res = await createJar(selected.currency, label);
+      await reload();
+      show(`${res.account.label || "Jar"} is ready`);
+      setAddingJar(false);
+      await reloadAudit().catch(() => undefined);
+    } catch (err) {
+      setError(errorMessage(err, "Could not open jar"));
     } finally {
       setPending(false);
     }
@@ -98,12 +119,19 @@ export function AccountsPage() {
       ) : (
         <>
           <Wallets
-            accounts={accounts}
+            accounts={wallets}
             selectedId={acct.id}
             onSelect={select}
             onAdd={missing.length > 0 ? () => setAdding(true) : undefined}
           />
           <AccountHero account={acct} onCopied={() => show("Copied")} />
+          <JarsPanel
+            spend={acct}
+            jars={jarsFor(accounts, acct.currency)}
+            canMove={acct.status === "active"}
+            onAdd={() => setAddingJar(true)}
+            onOpen={setOpenJar}
+          />
           {acct.status === "active" ? (
             <div className="quicks">
               <button className="quick" type="button" onClick={() => setForm("fund")}>
@@ -300,7 +328,9 @@ export function AccountsPage() {
 
       {closing && acct ? (
         <Sheet title="Close this account?" onClose={() => setClosing(false)}>
-          <p className="sheet-copy">You can only close it when the balance is zero. This cannot be undone.</p>
+          <p className="sheet-copy">
+            You can only close it when the balance is zero and this currency has no open jars. This cannot be undone.
+          </p>
           <div className="sheet-actions">
             <button className="btn btn-secondary" type="button" onClick={() => setClosing(false)}>
               Keep it
@@ -315,6 +345,26 @@ export function AccountsPage() {
             </button>
           </div>
         </Sheet>
+      ) : null}
+      {addingJar && acct ? (
+        <AddJarSheet spend={acct} pending={pending} onClose={() => setAddingJar(false)} onCreate={(label) => void onJar(label)} />
+      ) : null}
+      {openJar && acct ? (
+        <JarSheet
+          spend={acct}
+          jar={openJar}
+          pending={pending}
+          onClose={() => setOpenJar(null)}
+          onReload={async () => {
+            const next = await reload();
+            const fresh = next.find((a) => a.id === openJar.id);
+            if (fresh && fresh.status !== "closed") setOpenJar(fresh);
+            else setOpenJar(null);
+            await reloadAudit().catch(() => undefined);
+          }}
+          onToast={show}
+          onError={setError}
+        />
       ) : null}
       <Toast text={toast} />
     </Page>

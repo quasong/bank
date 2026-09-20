@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { convertFX, errorMessage, quoteFX, type FXQuote } from "../api";
 import { CURRENCIES, currencyName, currencyShortName, currencySymbol, formatMoney } from "../format";
 import { centsToDollars, dollarsToCents } from "../money";
-import { useAccounts, useSelectedAccount, useToast } from "../hooks";
+import { spendAccounts, useAccounts, useSelectedAccount, useToast } from "../hooks";
 import { AmountField, Banner, ChoiceMenu, EmptyState, IconCheck, IconSwap, Page, PageSkeleton, Toast } from "../ui";
 
 function prettyRate(rate: string) {
@@ -27,7 +27,8 @@ export function ConvertPage() {
   const fromCcy = selected?.currency || "USD";
   const targets = useMemo(() => CURRENCIES.filter((c) => c !== fromCcy), [fromCcy]);
   const blocked = selected != null && selected.status !== "active";
-  const destAcct = (accounts ?? []).find((a) => a.currency === toCcy);
+  const wallets = spendAccounts(accounts);
+  const destAcct = wallets.find((a) => a.currency === toCcy);
   const tooMuch = selected != null && cents != null && cents > selected.balance_cents;
   const pickedFrom = useRef(false);
 
@@ -35,7 +36,7 @@ export function ConvertPage() {
     if (pickedFrom.current || !accounts?.length) return;
     pickedFrom.current = true;
     if (selected && selected.status === "active" && selected.balance_cents > 0) return;
-    const funded = accounts.find((a) => a.status === "active" && a.balance_cents > 0);
+    const funded = wallets.find((a) => a.status === "active" && a.balance_cents > 0);
     if (funded) select(funded.id);
   }, [accounts, selected, select]);
 
@@ -179,7 +180,7 @@ export function ConvertPage() {
               value={selected?.id ?? ""}
               disabled={blocked}
               onChange={select}
-              options={accounts.map((a) => ({
+              options={wallets.map((a) => ({
                 value: a.id,
                 code: a.currency,
                 name: currencyShortName(a.currency),
@@ -223,7 +224,7 @@ export function ConvertPage() {
               disabled={blocked}
               onChange={setToCcy}
               options={targets.map((c) => {
-                const dest = accounts.find((a) => a.currency === c);
+                const dest = wallets.find((a) => a.currency === c);
                 return {
                   value: c,
                   code: c,

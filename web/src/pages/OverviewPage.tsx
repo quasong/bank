@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { errorMessage, openAccount, type ActivityItem } from "../api";
+import { errorMessage, openAccount, type ActivityItem, type BankAccount } from "../api";
 import { CURRENCIES, greeting, statusLabel, todayKicker } from "../format";
-import { useAccounts, useActivity, useSelectedAccount, useToast } from "../hooks";
+import { jarsFor, spendAccounts, useAccounts, useActivity, useSelectedAccount, useToast } from "../hooks";
+import { AddJarSheet, JarSheet, JarsPanel, createJar } from "../jars";
 import { MoneySheet } from "../moneyflow";
 import {
   AccountHero,
@@ -34,8 +35,11 @@ export function OverviewPage() {
   const [money, setMoney] = useState<MoneyKind | null>(null);
   const [openTxn, setOpenTxn] = useState<ActivityItem | null>(null);
   const [adding, setAdding] = useState(false);
+  const [addingJar, setAddingJar] = useState(false);
+  const [openJar, setOpenJar] = useState<BankAccount | null>(null);
 
-  const missing = CURRENCIES.filter((c) => !(accounts ?? []).some((a) => a.currency === c));
+  const missing = CURRENCIES.filter((c) => !spendAccounts(accounts).some((a) => a.currency === c));
+  const wallets = spendAccounts(accounts);
 
   async function onOpen(currency?: string) {
     setError("");
@@ -49,6 +53,22 @@ export function OverviewPage() {
       setAdding(false);
     } catch (err) {
       setError(errorMessage(err, "Could not open account"));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function onJar(label: string) {
+    if (!selected) return;
+    setError("");
+    setPending(true);
+    try {
+      const res = await createJar(selected.currency, label);
+      await reload();
+      show(`${res.account.label || "Jar"} is ready`);
+      setAddingJar(false);
+    } catch (err) {
+      setError(errorMessage(err, "Could not open jar"));
     } finally {
       setPending(false);
     }
@@ -84,12 +104,19 @@ export function OverviewPage() {
       ) : selected ? (
         <>
           <Wallets
-            accounts={accounts}
+            accounts={wallets}
             selectedId={selected.id}
             onSelect={select}
             onAdd={missing.length > 0 ? () => setAdding(true) : undefined}
           />
           <AccountHero account={selected} onCopied={() => show("Copied")} />
+          <JarsPanel
+            spend={selected}
+            jars={jarsFor(accounts, selected.currency)}
+            canMove={canMove}
+            onAdd={() => setAddingJar(true)}
+            onOpen={setOpenJar}
+          />
           {!canMove ? (
             <Banner>
               This account is {statusLabel(selected.status)}.{" "}
@@ -179,6 +206,26 @@ export function OverviewPage() {
           <p className="sheet-copy">Each balance gets its own local details, like Wise.</p>
           <CurrencyChoices currencies={missing} pending={pending} onPick={(ccy) => void onOpen(ccy)} />
         </Sheet>
+      ) : null}
+      {addingJar && selected ? (
+        <AddJarSheet spend={selected} pending={pending} onClose={() => setAddingJar(false)} onCreate={(label) => void onJar(label)} />
+      ) : null}
+      {openJar && selected ? (
+        <JarSheet
+          spend={selected}
+          jar={openJar}
+          pending={pending}
+          onClose={() => setOpenJar(null)}
+          onReload={async () => {
+            const next = await reload();
+            const fresh = next.find((a) => a.id === openJar.id);
+            if (fresh && fresh.status !== "closed") setOpenJar(fresh);
+            else setOpenJar(null);
+            await reloadActivity();
+          }}
+          onToast={show}
+          onError={setError}
+        />
       ) : null}
       {openTxn ? <TxnDetail item={openTxn} onClose={() => setOpenTxn(null)} /> : null}
       <Toast text={toast} />

@@ -1,6 +1,7 @@
 package account
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -60,13 +61,55 @@ func Transition(acct Account, want Status) (Status, error) {
 	return "", ErrInvalidRequest
 }
 
+type Product string
+
+const (
+	ProductSpend Product = "spend"
+	ProductJar   Product = "jar"
+)
+
+func (p Product) Spend() bool {
+	return p != ProductJar
+}
+
+func ParseProduct(s string) (Product, bool) {
+	switch Product(strings.TrimSpace(s)) {
+	case "", ProductSpend:
+		return ProductSpend, true
+	case ProductJar:
+		return ProductJar, true
+	default:
+		return "", false
+	}
+}
+
 type Account struct {
 	ID            uuid.UUID
 	CustomerID    uuid.UUID
 	Currency      currency.Code
 	AccountNumber string
+	Product       Product
+	Label         string
 	Status        Status
 	BalanceCents  int64
 	OpenedAt      time.Time
 	LedgerID      uuid.UUID
+}
+
+func (a Account) IsJar() bool {
+	return a.Product == ProductJar
+}
+
+func (a Account) IsSpend() bool {
+	return !a.IsJar()
+}
+
+func (a Account) DisplayName() string {
+	if a.IsJar() {
+		if a.Label != "" {
+			return a.Label
+		}
+		return "Jar"
+	}
+	return string(a.Currency)
 }

@@ -34,8 +34,11 @@ func (m *MemStore) OpenDeposit(_ context.Context, acct Account) (Account, error)
 	if acct.Currency == "" {
 		acct.Currency = currency.USD
 	}
+	if acct.Product == "" {
+		acct.Product = ProductSpend
+	}
 	for _, existing := range m.accounts {
-		if existing.CustomerID == acct.CustomerID && existing.Currency == acct.Currency {
+		if existing.CustomerID == acct.CustomerID && existing.Currency == acct.Currency && existing.IsSpend() && acct.IsSpend() {
 			return Account{}, ErrExists
 		}
 		if existing.AccountNumber == acct.AccountNumber {
@@ -65,7 +68,7 @@ func (m *MemStore) GetByCustomerCurrency(_ context.Context, customerID uuid.UUID
 		ccy = currency.USD
 	}
 	for _, a := range m.accounts {
-		if a.CustomerID == customerID && a.Currency == ccy {
+		if a.CustomerID == customerID && a.Currency == ccy && a.IsSpend() {
 			return a, nil
 		}
 	}
@@ -100,6 +103,9 @@ func (m *MemStore) ListByCustomer(_ context.Context, customerID uuid.UUID) ([]Ac
 		ri, rj := out[i].Currency.Rank(), out[j].Currency.Rank()
 		if ri != rj {
 			return ri < rj
+		}
+		if out[i].IsSpend() != out[j].IsSpend() {
+			return out[i].IsSpend()
 		}
 		return out[i].OpenedAt.Before(out[j].OpenedAt)
 	})
@@ -144,6 +150,21 @@ func (m *MemStore) SetNumber(_ context.Context, id uuid.UUID, number string) err
 	a.AccountNumber = n
 	m.accounts[id] = a
 	return nil
+}
+
+func (m *MemStore) SetLabel(_ context.Context, id uuid.UUID, label string) (Account, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	a, ok := m.accounts[id]
+	if !ok {
+		return Account{}, ErrNotFound
+	}
+	if !a.IsJar() {
+		return Account{}, ErrJar
+	}
+	a.Label = label
+	m.accounts[id] = a
+	return a, nil
 }
 
 func (m *MemStore) SetStatus(_ context.Context, id uuid.UUID, next Status) (Account, error) {

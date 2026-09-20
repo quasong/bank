@@ -961,12 +961,60 @@ button.fact {
   letter-spacing: -0.03em;
 }
 
-.panel-h a,
-.panel-h .text-link {
-  font-size: 13px;
+.jars .panel-empty {
+  margin: 0;
+  padding: 14px 18px 18px;
+}
+
+.jars-sum {
+  margin: 0;
+  padding: 8px 18px 0;
+  font-size: 12px;
   font-weight: 600;
-  text-decoration: none;
   color: var(--muted);
+}
+
+.jar {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.jar:hover {
+  background: var(--bg);
+}
+
+.jar span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.jar strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.jar em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.jar .money {
+  font-size: 14px;
 }
 
 .txn {

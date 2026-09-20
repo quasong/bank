@@ -17,4 +17,8 @@ var (
 	ErrHasBalance     = errors.New("account has balance")
 	ErrCurrency       = errors.New("currency mismatch")
 	ErrRates          = errors.New("rates unavailable")
+	ErrJar            = errors.New("jar cannot use this operation")
+	ErrJarLimit       = errors.New("too many jars")
+	ErrHasJars        = errors.New("close jars first")
+	ErrNeedSpend      = errors.New("open this currency first")
 )

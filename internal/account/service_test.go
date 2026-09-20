@@ -294,3 +294,69 @@ func TestTransition(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestJarsMoveAndProductRules(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemStore()
+	svc := NewService(store)
+	cid := uuid.New()
+	if _, err := svc.OpenJar(ctx, cid, currency.USD, "Rent"); !errors.Is(err, ErrNeedSpend) {
+		t.Fatalf("need spend: %v", err)
+	}
+	usd, err := svc.Open(ctx, cid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usd.Product != ProductSpend {
+		t.Fatalf("product %s", usd.Product)
+	}
+	if _, _, _, err := svc.Fund(ctx, cid, usd.ID, 5000, "in"); err != nil {
+		t.Fatal(err)
+	}
+	jar, err := svc.OpenJar(ctx, cid, currency.USD, "Rent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !jar.IsJar() || jar.Label != "Rent" || jar.Currency != currency.USD {
+		t.Fatalf("%+v", jar)
+	}
+	if currency.Core(jar.AccountNumber) == currency.Core(usd.AccountNumber) {
+		t.Fatalf("shared core %s %s", jar.AccountNumber, usd.AccountNumber)
+	}
+	if _, err := svc.Open(ctx, cid); !errors.Is(err, ErrExists) {
+		t.Fatalf("second spend: %v", err)
+	}
+	moved, err := svc.Move(ctx, cid, usd.ID, jar.ID, 2000, "mv-1", "")
+	if err != nil || moved.From.BalanceCents != 3000 || moved.To.BalanceCents != 2000 {
+		t.Fatalf("%+v %v", moved, err)
+	}
+	replay, err := svc.Move(ctx, cid, usd.ID, jar.ID, 2000, "mv-1", "")
+	if err != nil || !replay.Idempotent || replay.From.BalanceCents != 3000 {
+		t.Fatalf("replay %+v %v", replay, err)
+	}
+	if _, _, _, err := svc.Fund(ctx, cid, jar.ID, 100, "jar-fund"); !errors.Is(err, ErrJar) {
+		t.Fatalf("fund jar: %v", err)
+	}
+	if _, _, _, err := svc.Withdraw(ctx, cid, jar.ID, 100, "jar-out"); !errors.Is(err, ErrJar) {
+		t.Fatalf("withdraw jar: %v", err)
+	}
+	if _, err := svc.Close(ctx, cid, usd.ID); !errors.Is(err, ErrHasJars) {
+		t.Fatalf("close spend with jar: %v", err)
+	}
+	renamed, err := svc.RenameJar(ctx, cid, jar.ID, "Travel")
+	if err != nil || renamed.Label != "Travel" {
+		t.Fatalf("%+v %v", renamed, err)
+	}
+	if _, err := svc.Move(ctx, cid, jar.ID, usd.ID, 2000, "mv-back", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Close(ctx, cid, jar.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := svc.Withdraw(ctx, cid, usd.ID, 5000, "drain"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Close(ctx, cid, usd.ID); err != nil {
+		t.Fatal(err)
+	}
+}

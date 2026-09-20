@@ -9,6 +9,7 @@ const (
 	Withdrawal      = "withdrawal"
 	Transfer        = "transfer"
 	FX              = "fx"
+	Move            = "move"
 	AccountFreeze   = "account_freeze"
 	AccountUnfreeze = "account_unfreeze"
 	AccountClose    = "account_close"

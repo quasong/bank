@@ -16,7 +16,7 @@ import {
   statusLabel,
 } from "../format";
 import { centsToDollars, dollarsToCents } from "../money";
-import { useAccounts, usePayees, useSelectedAccount, useToast } from "../hooks";
+import { spendAccounts, useAccounts, usePayees, useSelectedAccount, useToast } from "../hooks";
 import { SavePersonSheet } from "../people";
 import { AmountField, Banner, CurrencyFlag, EmptyState, IconCheck, Page, PageSkeleton, Toast } from "../ui";
 
@@ -274,9 +274,9 @@ export function TransfersPage() {
         </Banner>
       ) : null}
       <form className="send-card" onSubmit={onContinue}>
-        {accounts.length > 1 ? (
+        {spendAccounts(accounts).length > 1 ? (
           <div className="chips" role="group" aria-label="Send from">
-            {accounts.map((a) => (
+            {spendAccounts(accounts).map((a) => (
               <button
                 key={a.id}
                 type="button"

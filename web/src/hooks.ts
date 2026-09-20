@@ -1,6 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listAccounts, listActivity, listAudit, listPayees, type ActivityItem, type AuditEvent, type BankAccount, type Payee } from "./api";
 
+export function isSpend(a: { product?: string }) {
+  return a.product !== "jar";
+}
+
+export function isJar(a: { product?: string }) {
+  return a.product === "jar";
+}
+
+export function jarName(a: { label?: string }) {
+  return (a.label ?? "").trim() || "Jar";
+}
+
+export function spendAccounts(accounts: BankAccount[] | null | undefined) {
+  return (accounts ?? []).filter(isSpend);
+}
+
+export function jarsFor(accounts: BankAccount[] | null | undefined, currency: string) {
+  return (accounts ?? []).filter((a) => isJar(a) && a.currency === currency && a.status !== "closed");
+}
+
 export function useAccounts() {
   const [accounts, setAccounts] = useState<BankAccount[] | null>(null);
   const [error, setError] = useState("");
@@ -89,11 +109,13 @@ export function useAudit() {
 const SELECTED_KEY = "tb.selected-account";
 
 function preferredAccount(accounts: BankAccount[], id: string) {
-  const match = accounts.find((a) => a.id === id);
+  const spend = spendAccounts(accounts);
+  const match = spend.find((a) => a.id === id);
   if (match) return match;
   return (
-    accounts.find((a) => a.status === "active" && a.balance_cents > 0) ??
-    accounts.find((a) => a.status === "active") ??
+    spend.find((a) => a.status === "active" && a.balance_cents > 0) ??
+    spend.find((a) => a.status === "active") ??
+    spend[0] ??
     accounts[0]
   );
 }
