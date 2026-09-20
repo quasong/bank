@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ActivityItem } from "../api";
-import { activityHint, activityKindLabel, activityTitle, currencyName, dayLabel } from "../format";
-import { spendAccounts, useAccounts, useActivityFeed, useSelectedAccount } from "../hooks";
+import { activityHint, activityKindLabel, activityTitle, currencyName, currencyShortName, dayLabel } from "../format";
+import { collapseMoves, pocketAccountIds, spendAccounts, useAccounts, useActivityFeed, useSelectedAccount } from "../hooks";
 import { Banner, EmptyState, Page, PageSkeleton, TxnDetail, TxnRow, TxnSkeleton, Wallets } from "../ui";
 
 type Filter = "all" | "in" | "out";
@@ -47,19 +47,23 @@ export function ActivityPage() {
   const accountIds = useMemo(() => {
     if (!accounts?.length || !selected) return [] as string[];
     if (scope === "all") return accounts.map((a) => a.id);
-    return [selected.id];
+    return pocketAccountIds(accounts, selected);
   }, [accounts, selected, scope]);
 
   const { items } = useActivityFeed(accountIds);
+  const feed = useMemo(() => {
+    if (items == null) return null;
+    return scope === "wallet" ? collapseMoves(items) : items;
+  }, [items, scope]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return (items ?? []).filter((item) => {
+    return (feed ?? []).filter((item) => {
       if (filter === "in" && item.signed_cents < 0) return false;
       if (filter === "out" && item.signed_cents >= 0) return false;
       return matchesActivity(item, needle);
     });
-  }, [items, filter, query]);
+  }, [feed, filter, query]);
 
   const groups = useMemo(() => {
     const map = new Map<string, ActivityItem[]>();
@@ -118,7 +122,7 @@ export function ActivityPage() {
       <div className="filters" role="tablist" aria-label="Activity scope">
         {(
           [
-            ["wallet", "This wallet"],
+            ["wallet", currencyShortName(selected.currency)],
             ["all", "All balances"],
           ] as const
         ).map(([id, label]) => (
@@ -154,11 +158,11 @@ export function ActivityPage() {
           </button>
         ))}
       </div>
-      {items == null ? (
+      {feed == null ? (
         <section className="panel">
           <TxnSkeleton rows={5} />
         </section>
-      ) : items.length === 0 && !searching ? (
+      ) : feed.length === 0 && !searching ? (
         <EmptyState
           title="Nothing here yet"
           body={

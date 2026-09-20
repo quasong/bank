@@ -356,6 +356,8 @@ func (h *Handler) Activity(w http.ResponseWriter, r *http.Request) {
 		for _, a := range list {
 			if a.IsJar() {
 				names[a.AccountNumber] = a.DisplayName()
+			} else if names[a.AccountNumber] == "" {
+				names[a.AccountNumber] = a.Currency.ShortName()
 			}
 		}
 	}

@@ -246,7 +246,15 @@ export function Banner({ kind = "error", children }: { kind?: "error" | "ok"; ch
   return <p className={kind === "ok" ? "banner banner-ok" : "banner banner-error"}>{children}</p>;
 }
 
-export function AccountHero({ account, onCopied }: { account: BankAccount; onCopied?: () => void }) {
+export function AccountHero({
+  account,
+  parkedCents = 0,
+  onCopied,
+}: {
+  account: BankAccount;
+  parkedCents?: number;
+  onCopied?: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const { hidden, toggle } = useHideBalance();
   const parts = usdParts(account.balance_cents);
@@ -297,6 +305,7 @@ export function AccountHero({ account, onCopied }: { account: BankAccount; onCop
           </>
         )}
       </p>
+      {!hidden && parkedCents > 0 ? <p className="hero-aside">{formatMoney(parkedCents, ccy)} in jars</p> : null}
     </article>
   );
 }

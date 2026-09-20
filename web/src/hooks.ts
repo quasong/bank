@@ -21,6 +21,25 @@ export function jarsFor(accounts: BankAccount[] | null | undefined, currency: st
   return (accounts ?? []).filter((a) => isJar(a) && a.currency === currency && a.status !== "closed");
 }
 
+export function jarsParked(accounts: BankAccount[] | null | undefined, currency: string) {
+  return jarsFor(accounts, currency).reduce((sum, j) => sum + j.balance_cents, 0);
+}
+
+export function pocketAccountIds(accounts: BankAccount[] | null | undefined, spend?: BankAccount) {
+  if (!spend) return [] as string[];
+  return [spend.id, ...jarsFor(accounts, spend.currency).map((j) => j.id)];
+}
+
+export function collapseMoves(items: ActivityItem[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (item.kind !== "move") return true;
+    if (seen.has(item.journal_id)) return false;
+    seen.add(item.journal_id);
+    return true;
+  });
+}
+
 export function useAccounts() {
   const [accounts, setAccounts] = useState<BankAccount[] | null>(null);
   const [error, setError] = useState("");
@@ -150,9 +169,25 @@ export function useSelectedAccount(accounts: BankAccount[] | null) {
   return { selected, select };
 }
 
+function sortActivity(batches: ActivityItem[][]) {
+  return batches.flat().sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+}
+
 export function useActivityFeed(accountIds: string[], limit = 100) {
   const key = accountIds.join(",");
   const [state, setState] = useState<{ key: string; items: ActivityItem[] | null }>({ key: "", items: null });
+
+  const reload = useCallback(async () => {
+    const ids = key ? key.split(",") : [];
+    if (!ids.length) {
+      setState({ key, items: [] });
+      return [] as ActivityItem[];
+    }
+    const batches = await Promise.all(ids.map((id) => listActivity(id, limit).then((data) => data.items)));
+    const items = sortActivity(batches);
+    setState({ key, items });
+    return items;
+  }, [key, limit]);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,8 +200,7 @@ export function useActivityFeed(accountIds: string[], limit = 100) {
     Promise.all(ids.map((id) => listActivity(id, limit).then((data) => data.items)))
       .then((batches) => {
         if (cancelled) return;
-        const items = batches.flat().sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
-        setState({ key, items });
+        setState({ key, items: sortActivity(batches) });
       })
       .catch(() => {
         if (!cancelled) setState({ key, items: [] });
@@ -177,7 +211,7 @@ export function useActivityFeed(accountIds: string[], limit = 100) {
   }, [key, limit]);
 
   const items = state.key === key ? state.items : null;
-  return { items };
+  return { items, reload };
 }
 
 export function useToast(ms = 2400) {

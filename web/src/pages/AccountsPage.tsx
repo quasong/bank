@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { closeAccount, errorMessage, freezeAccount, openAccount, unfreezeAccount, type BankAccount } from "../api";
 import { CURRENCIES, auditAmount, auditLabel, copyText, currencyName, formatAccountNumber, formatLocalAccount, openedLabel, recentWhen } from "../format";
-import { jarsFor, spendAccounts, useAccounts, useAudit, useSelectedAccount, useToast } from "../hooks";
+import { jarsFor, jarsParked, spendAccounts, useAccounts, useAudit, useSelectedAccount, useToast } from "../hooks";
 import { AddJarSheet, JarSheet, JarsPanel, createJar } from "../jars";
 import { MoneySheet } from "../moneyflow";
 import { PeoplePanel } from "../people";
@@ -62,6 +62,7 @@ export function AccountsPage() {
       await reload();
       show(`${res.account.label || "Jar"} is ready`);
       setAddingJar(false);
+      setOpenJar(res.account);
       await reloadAudit().catch(() => undefined);
     } catch (err) {
       setError(errorMessage(err, "Could not open jar"));
@@ -124,14 +125,7 @@ export function AccountsPage() {
             onSelect={select}
             onAdd={missing.length > 0 ? () => setAdding(true) : undefined}
           />
-          <AccountHero account={acct} onCopied={() => show("Copied")} />
-          <JarsPanel
-            spend={acct}
-            jars={jarsFor(accounts, acct.currency)}
-            canMove={acct.status === "active"}
-            onAdd={() => setAddingJar(true)}
-            onOpen={setOpenJar}
-          />
+          <AccountHero account={acct} parkedCents={jarsParked(accounts, acct.currency)} onCopied={() => show("Copied")} />
           {acct.status === "active" ? (
             <div className="quicks">
               <button className="quick" type="button" onClick={() => setForm("fund")}>
@@ -176,6 +170,13 @@ export function AccountsPage() {
             </div>
           ) : null}
           {acct.status === "closed" ? <p className="kicker">This account is closed and cannot move money.</p> : null}
+          <JarsPanel
+            spend={acct}
+            jars={jarsFor(accounts, acct.currency)}
+            canMove={acct.status === "active"}
+            onAdd={() => setAddingJar(true)}
+            onOpen={setOpenJar}
+          />
           <section className="panel facts">
             <p className="day-label">Receiving details</p>
             {acct.currency === "EUR" ? (

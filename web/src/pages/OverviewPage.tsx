@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { errorMessage, openAccount, type ActivityItem, type BankAccount } from "../api";
 import { CURRENCIES, greeting, statusLabel, todayKicker } from "../format";
-import { jarsFor, spendAccounts, useAccounts, useActivity, useSelectedAccount, useToast } from "../hooks";
+import { collapseMoves, jarsFor, jarsParked, pocketAccountIds, spendAccounts, useAccounts, useActivityFeed, useSelectedAccount, useToast } from "../hooks";
 import { AddJarSheet, JarSheet, JarsPanel, createJar } from "../jars";
 import { MoneySheet } from "../moneyflow";
 import {
@@ -29,7 +29,7 @@ type MoneyKind = "fund" | "withdraw";
 export function OverviewPage() {
   const { accounts, error, setError, reload } = useAccounts();
   const { selected, select } = useSelectedAccount(accounts);
-  const { items, reload: reloadActivity } = useActivity(selected?.id);
+  const { items, reload: reloadActivity } = useActivityFeed(pocketAccountIds(accounts, selected));
   const { text: toast, show } = useToast();
   const [pending, setPending] = useState(false);
   const [money, setMoney] = useState<MoneyKind | null>(null);
@@ -67,6 +67,7 @@ export function OverviewPage() {
       await reload();
       show(`${res.account.label || "Jar"} is ready`);
       setAddingJar(false);
+      setOpenJar(res.account);
     } catch (err) {
       setError(errorMessage(err, "Could not open jar"));
     } finally {
@@ -86,7 +87,8 @@ export function OverviewPage() {
   }
 
   const canMove = selected?.status === "active";
-  const recent = items?.slice(0, 6) ?? [];
+  const recent = collapseMoves(items ?? []).slice(0, 6);
+  const parked = selected ? jarsParked(accounts, selected.currency) : 0;
 
   return (
     <Page title={greeting()} kicker={todayKicker()}>
@@ -109,14 +111,7 @@ export function OverviewPage() {
             onSelect={select}
             onAdd={missing.length > 0 ? () => setAdding(true) : undefined}
           />
-          <AccountHero account={selected} onCopied={() => show("Copied")} />
-          <JarsPanel
-            spend={selected}
-            jars={jarsFor(accounts, selected.currency)}
-            canMove={canMove}
-            onAdd={() => setAddingJar(true)}
-            onOpen={setOpenJar}
-          />
+          <AccountHero account={selected} parkedCents={parked} onCopied={() => show("Copied")} />
           {!canMove ? (
             <Banner>
               This account is {statusLabel(selected.status)}.{" "}
@@ -167,6 +162,13 @@ export function OverviewPage() {
               Withdraw
             </button>
           </div>
+          <JarsPanel
+            spend={selected}
+            jars={jarsFor(accounts, selected.currency)}
+            canMove={canMove}
+            onAdd={() => setAddingJar(true)}
+            onOpen={setOpenJar}
+          />
           <section className="panel">
             <div className="panel-h">
               <h2>Recent</h2>

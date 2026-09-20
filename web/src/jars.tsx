@@ -1,11 +1,26 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { closeAccount, errorMessage, moveMoney, openAccount, renameAccount, type BankAccount } from "./api";
-import { formatMoney } from "./format";
+import { currencyShortName, formatMoney } from "./format";
 import { jarName } from "./hooks";
 import { centsToDollars, dollarsToCents } from "./money";
 import { AmountChips, AmountField, Banner, MoneyText, Sheet } from "./ui";
 
 const PRESETS = [1000, 2000, 5000, 10000];
+const SUGGESTIONS = ["Rent", "Travel", "Emergency", "Savings"];
+
+function pocketLabel(a: BankAccount) {
+  return a.product === "jar" ? jarName(a) : currencyShortName(a.currency);
+}
+
+export function jarEmoji(label: string) {
+  const n = label.toLowerCase();
+  if (/rent|home|house|flat/.test(n)) return "🏠";
+  if (/travel|trip|holiday|vacation|flight/.test(n)) return "✈️";
+  if (/emerg|rainy/.test(n)) return "🛟";
+  if (/save|saving|nest/.test(n)) return "💰";
+  if (/food|eat|grocer/.test(n)) return "🍽️";
+  return "🫙";
+}
 
 export function JarsPanel({
   spend,
@@ -22,31 +37,41 @@ export function JarsPanel({
 }) {
   const parked = jars.reduce((sum, j) => sum + j.balance_cents, 0);
   return (
-    <section className="panel jars">
-      <div className="panel-h">
+    <section className="jars" aria-label="Jars">
+      <div className="jars-head">
         <h2>Jars</h2>
-        {canMove && onAdd ? (
-          <button type="button" className="text-link" onClick={onAdd}>
-            Add
-          </button>
+        {parked > 0 ? (
+          <p>
+            <MoneyText cents={parked} currency={spend.currency} /> set aside
+          </p>
         ) : null}
       </div>
-      {jars.length === 0 ? (
-        <p className="panel-empty">Set {spend.currency} aside for rent, a trip, or anything else. It stays in this currency.</p>
-      ) : (
-        <>
-          {parked > 0 ? <p className="jars-sum">{formatMoney(parked, spend.currency)} in jars</p> : null}
-          {jars.map((jar) => (
-            <button key={jar.id} type="button" className="jar" onClick={() => onOpen(jar)}>
-              <span>
-                <strong>{jarName(jar)}</strong>
-                <em>{jar.status === "active" ? "Inside this currency" : jar.status}</em>
-              </span>
-              <MoneyText cents={jar.balance_cents} currency={jar.currency} />
-            </button>
-          ))}
-        </>
-      )}
+      <div className="jars-row">
+        {jars.map((jar) => (
+          <button key={jar.id} type="button" className="jar-chip" onClick={() => onOpen(jar)}>
+            <span className="jar-emoji" aria-hidden="true">
+              {jarEmoji(jarName(jar))}
+            </span>
+            <span>
+              <strong>{jarName(jar)}</strong>
+              {jar.status === "active" ? <MoneyText cents={jar.balance_cents} currency={jar.currency} /> : <em>{jar.status}</em>}
+            </span>
+          </button>
+        ))}
+        {canMove && onAdd ? (
+          <button type="button" className="jar-chip add" onClick={onAdd}>
+            <span className="jar-emoji" aria-hidden="true">
+              ＋
+            </span>
+            <span>
+              <strong>New jar</strong>
+              <em>{jars.length === 0 ? `Set ${spend.currency} aside` : "Add another"}</em>
+            </span>
+          </button>
+        ) : jars.length === 0 ? (
+          <p className="jars-empty">Unfreeze this balance to open a jar.</p>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -72,11 +97,24 @@ export function AddJarSheet({
           onCreate(label.trim());
         }}
       >
-        <p className="sheet-copy">Jars hold {spend.currency} only. Move money in from this balance; they cannot send or convert.</p>
+        <p className="sheet-copy">Set {currencyShortName(spend.currency)} aside. Jars cannot send or convert.</p>
         <label>
           Name
           <input value={label} onChange={(e) => setLabel(e.target.value.slice(0, 20))} placeholder="Rent, travel…" autoComplete="off" autoFocus />
         </label>
+        <div className="chips">
+          {SUGGESTIONS.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className={`chip${label === name ? " chip-on" : ""}`}
+              onClick={() => setLabel(name)}
+            >
+              <span aria-hidden="true">{jarEmoji(name)}</span>
+              {name}
+            </button>
+          ))}
+        </div>
         <button className="btn btn-primary btn-block" type="submit" disabled={pending}>
           {pending ? "Opening…" : "Create jar"}
         </button>
@@ -133,12 +171,12 @@ export function MoveSheet({
       <form className="stack" onSubmit={onSubmit}>
         {error ? <Banner>{error}</Banner> : null}
         <p className="sheet-copy">
-          From {from.product === "jar" ? jarName(from) : from.currency} to {to.product === "jar" ? jarName(to) : to.currency}.
+          {pocketLabel(from)} → {pocketLabel(to)}
         </p>
         <AmountField value={amount} onChange={setAmount} autoFocus currency={from.currency} />
         <AmountChips values={chips} onPick={(v) => setAmount(centsToDollars(v))} disabled={pending} currency={from.currency} />
         <p className="avail">
-          Available {formatMoney(from.balance_cents, from.currency)}
+          {formatMoney(from.balance_cents, from.currency)} in {pocketLabel(from)}
           {from.balance_cents > 0 ? (
             <>
               {" · "}
@@ -177,6 +215,11 @@ export function JarSheet({
   const [saving, setSaving] = useState(false);
   const [move, setMove] = useState<"in" | "out" | null>(null);
   const canMove = spend.status === "active" && jar.status === "active";
+  const spendName = currencyShortName(spend.currency);
+
+  useEffect(() => {
+    setLabel(jar.label ?? "");
+  }, [jar.id, jar.label]);
 
   async function saveName() {
     const next = label.trim();
@@ -224,7 +267,7 @@ export function JarSheet({
       <MoveSheet
         from={jar}
         to={spend}
-        title={`Move to ${spend.currency}`}
+        title={`Move to ${spendName}`}
         onClose={() => setMove(null)}
         onSuccess={async (message) => {
           await onReload();
@@ -237,35 +280,43 @@ export function JarSheet({
 
   return (
     <Sheet title={jarName(jar)} onClose={onClose}>
-      <p className="detail-amt">
-        <MoneyText cents={jar.balance_cents} currency={jar.currency} reveal />
-      </p>
-      {canMove ? (
-        <div className="sheet-actions">
-          <button className="btn btn-secondary" type="button" disabled={!spend.balance_cents} onClick={() => setMove("in")}>
-            Move in
+      <div className="stack">
+        <p className="detail-amt">
+          <MoneyText cents={jar.balance_cents} currency={jar.currency} reveal />
+        </p>
+        {canMove ? (
+          <>
+            <div className="sheet-actions">
+              <button className="btn btn-secondary" type="button" disabled={!spend.balance_cents} onClick={() => setMove("in")}>
+                From {spendName}
+              </button>
+              <button className="btn btn-primary" type="button" disabled={!jar.balance_cents} onClick={() => setMove("out")}>
+                To {spendName}
+              </button>
+            </div>
+            {spend.balance_cents === 0 && jar.balance_cents === 0 ? (
+              <p className="sheet-copy">Add money to {spendName} first, then move it in.</p>
+            ) : null}
+          </>
+        ) : (
+          <p className="sheet-copy">Unfreeze both balances to move money.</p>
+        )}
+        <label>
+          Name
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value.slice(0, 20))}
+            onBlur={() => void saveName()}
+            disabled={saving || jar.status === "closed"}
+            autoComplete="off"
+          />
+        </label>
+        {jar.balance_cents === 0 && jar.status === "active" ? (
+          <button className="btn btn-quiet btn-block" type="button" disabled={pending} onClick={() => void onCloseJar()}>
+            Close jar
           </button>
-          <button className="btn btn-primary" type="button" disabled={!jar.balance_cents} onClick={() => setMove("out")}>
-            Move out
-          </button>
-        </div>
-      ) : (
-        <p className="sheet-copy">Unfreeze both balances to move money.</p>
-      )}
-      <label>
-        Name
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value.slice(0, 20))}
-          onBlur={() => void saveName()}
-          disabled={saving || jar.status === "closed"}
-        />
-      </label>
-      {jar.balance_cents === 0 && jar.status === "active" ? (
-        <button className="btn btn-quiet btn-block" type="button" disabled={pending} onClick={() => void onCloseJar()}>
-          Close jar
-        </button>
-      ) : null}
+        ) : null}
+      </div>
     </Sheet>
   );
 }

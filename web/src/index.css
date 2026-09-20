@@ -121,6 +121,10 @@ a {
   gap: 14px;
 }
 
+.stack > .sheet-copy {
+  margin: 0;
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -445,6 +449,13 @@ a.btn {
 
 .hero-dots {
   letter-spacing: 0.12em;
+}
+
+.hero-aside {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .hero-card.is-frozen {
@@ -888,7 +899,7 @@ button.fact {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
   gap: 10px;
-  margin: 18px 0 28px;
+  margin: 16px 0 20px;
 }
 
 .quick {
@@ -961,60 +972,123 @@ button.fact {
   letter-spacing: -0.03em;
 }
 
-.jars .panel-empty {
-  margin: 0;
-  padding: 14px 18px 18px;
+.jars {
+  margin: 0 0 28px;
 }
 
-.jars-sum {
+.jars-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 10px;
+}
+
+.jars-head h2 {
   margin: 0;
-  padding: 8px 18px 0;
+  font-size: 16px;
+  letter-spacing: -0.03em;
+}
+
+.jars-head p {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
 }
 
-.jar {
-  appearance: none;
-  width: 100%;
+.jars-head .money {
+  font-size: inherit;
+  font-weight: 600;
+  color: inherit;
+}
+
+.jars-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 8px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.jars-row::-webkit-scrollbar {
+  height: 4px;
+}
+
+.jars-row::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+}
+
+.jar-chip {
+  appearance: none;
+  flex: 0 0 140px;
+  width: 140px;
+  scroll-snap-align: start;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 12px;
-  padding: 14px 18px;
-  border: 0;
-  border-top: 1px solid var(--line);
-  background: transparent;
+  cursor: pointer;
   font: inherit;
   color: inherit;
   text-align: left;
-  cursor: pointer;
 }
 
-.jar:hover {
-  background: var(--bg);
+.jar-chip:hover {
+  border-color: var(--ink);
 }
 
-.jar span {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.jar-chip.add {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.jar-emoji {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.jar-chip span:last-child {
   min-width: 0;
+  width: 100%;
 }
 
-.jar strong {
+.jar-chip strong {
+  display: block;
   font-size: 14px;
   font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.jar em {
+.jar-chip em,
+.jar-chip .money {
+  display: block;
+  margin-top: 2px;
   font-style: normal;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
-.jar .money {
-  font-size: 14px;
+.jars-empty {
+  margin: 0;
+  padding: 8px 2px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .txn {
@@ -1915,6 +1989,11 @@ button.fact {
 
   .wallet .money {
     font-size: 16px;
+  }
+
+  .jar-chip {
+    flex-basis: 132px;
+    width: 132px;
   }
 
   .page-head h1 {
